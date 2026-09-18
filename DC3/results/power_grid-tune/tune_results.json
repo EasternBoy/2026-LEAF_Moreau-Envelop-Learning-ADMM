@@ -1,0 +1,88 @@
+{
+  "grid": {
+    "dc3.obj_scale": [
+      100.0,
+      1000.0
+    ],
+    "dc3.soft_weight": [
+      10.0,
+      100.0
+    ]
+  },
+  "fixed": [
+    "dc3.epochs=200",
+    "dc3.hidden_size=512",
+    "dc3.lr=1e-3",
+    "dc3.lr_decay=0.995",
+    "dc3.corr_lr=1e-2",
+    "data.n_train=4000",
+    "data.n_valid=500"
+  ],
+  "results": [
+    {
+      "valid_feasible_rate": 1.0,
+      "valid_obj_mean": 39300.83530323294,
+      "valid_ineq_max": 4.563426590831199e-06,
+      "valid_corr_steps": 200,
+      "valid_corr_converged": 0.996,
+      "train_time_s": 105.84471033408772,
+      "best_epoch": 190,
+      "point": {
+        "dc3.obj_scale": 100.0,
+        "dc3.soft_weight": 10.0
+      }
+    },
+    {
+      "valid_feasible_rate": 1.0,
+      "valid_obj_mean": 40884.529173216295,
+      "valid_ineq_max": 0.0,
+      "valid_corr_steps": 8,
+      "valid_corr_converged": 1.0,
+      "train_time_s": 90.58200975006912,
+      "best_epoch": 135,
+      "point": {
+        "dc3.obj_scale": 100.0,
+        "dc3.soft_weight": 100.0
+      }
+    },
+    {
+      "valid_feasible_rate": 1.0,
+      "valid_obj_mean": 41208.88951590739,
+      "valid_ineq_max": 0.0,
+      "valid_corr_steps": 9,
+      "valid_corr_converged": 1.0,
+      "train_time_s": 95.9291189579526,
+      "best_epoch": 199,
+      "point": {
+        "dc3.obj_scale": 1000.0,
+        "dc3.soft_weight": 10.0
+      }
+    },
+    {
+      "valid_feasible_rate": 1.0,
+      "valid_obj_mean": 48567.69806321572,
+      "valid_ineq_max": 0.0,
+      "valid_corr_steps": 9,
+      "valid_corr_converged": 1.0,
+      "train_time_s": 96.97311495803297,
+      "best_epoch": 130,
+      "point": {
+        "dc3.obj_scale": 1000.0,
+        "dc3.soft_weight": 100.0
+      }
+    }
+  ],
+  "best": {
+    "valid_feasible_rate": 1.0,
+    "valid_obj_mean": 39300.83530323294,
+    "valid_ineq_max": 4.563426590831199e-06,
+    "valid_corr_steps": 200,
+    "valid_corr_converged": 0.996,
+    "train_time_s": 105.84471033408772,
+    "best_epoch": 190,
+    "point": {
+      "dc3.obj_scale": 100.0,
+      "dc3.soft_weight": 10.0
+    }
+  }
+}

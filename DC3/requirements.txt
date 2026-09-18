@@ -1,0 +1,8 @@
+# Pinned to the versions this benchmark was executed with (Python 3.12).
+torch==2.14.0
+numpy==2.5.3
+scipy==1.18.1
+cvxpy==1.9.2
+clarabel==0.11.1
+ecos==2.0.14
+matplotlib==3.11.2

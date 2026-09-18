@@ -1,0 +1,36 @@
+{
+    "methods": {
+        "ADMM(Gurobi aux)": {
+            "note": "not_run: needs Gurobi for aux_solver_eco"
+        },
+        "Ipopt(tol=1e-10)": {
+            "gap_pct_mean": 0,
+            "note": "ground-truth reference (examples/power_grid/solutionOG.jl uses tol 1e-20)",
+            "obj_mean": 37499.075445871254,
+            "latency_median_ms": 13.663053512573242,
+            "gap_pct_max": 0,
+            "feasible_rate": 1
+        },
+        "Ipopt(early-stop)": {
+            "gap_pct_mean": 0.004651896348363042,
+            "note": "Ipopt stopped by Ipopt_callback_BM at 0.01% relative gap",
+            "obj_mean": 37499.10142705514,
+            "latency_median_ms": 10.79857349395752,
+            "gap_pct_max": 0.009938284946391304,
+            "feasible_rate": 1
+        },
+        "LME-ADMM(split)": {
+            "gap_pct_mean": 0.5627987031284912,
+            "note": "examples/power_grid/eMPC_L-ADMM.jl :: LME_ADMM_split with dynamics_projection",
+            "eq_max": 1.5987211554602254e-14,
+            "obj_mean": 37278.79173903988,
+            "latency_median_ms": 3.1015872955322266,
+            "gap_pct_max": 9.536168826846946,
+            "feasible_rate": 0.506,
+            "ineq_max": 0.30636633559449905
+        }
+    },
+    "note": "produced by DC3/julia/baselines_power.jl on DC3's exported test instances; Gurobi-based baselines (standard ADMM and LME_ADMM with aux_solver_eco) were not run - no license.",
+    "max_opt_gap": 0.01,
+    "n_instances": 500
+}

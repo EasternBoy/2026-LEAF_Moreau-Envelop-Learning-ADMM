@@ -1,0 +1,226 @@
+# DC3 for the economic-MPC microgrid problem
+
+DC3 (*Deep Constraint Completion and Correction*, [Donti, Rolnick & Kolter,
+ICLR 2021](https://arxiv.org/abs/2104.12225), code
+[locuslab/DC3](https://github.com/locuslab/DC3)) applied to the problem in
+`examples/power_grid`.
+
+**This is the repository's economic MPC, not the AC-OPF example of the DC3
+paper.**  The formulation below is a transcription of `power_system.jl` and
+`eMPC_JuMPsolver.jl`; nothing about the optimisation problem is changed.
+
+---
+
+## 1. The problem (source of truth: the Julia code)
+
+Constants from `energy_mag()`: `N = 96`, `dT = 0.25 h`, `A = 1`,
+`B = −dT/BESS = −5·10⁻⁴` (`BESS = 500`), `r_ec = 0.1`, `r_df = 10`,
+`r_op = 19.19`, `η = 0.8`, `a = 50`, `x∈[0.2, 0.8]`, `u∈[−700, 700]`.
+
+| | |
+|---|---|
+| decision variables | `m_k` grid import, `u_k` BESS power, `p_k` delivered power (`k = 1..N`), `x_k` state of charge (`k = 0..N`) |
+| instance parameters | `x0`, `load_{1..N}`, `gen_{1..N}` |
+| objective | `Σ_k r_ec·dT·(m_k + (1−η)/(2√η)·\|u_k\|) + r_op·max(m_k,0) + r_df·max(a/p_k − 1, 0)` |
+| equalities | `x_k = A x_{k−1} + B u_k`; `x_0 = x0`; `x_N = x0`; `u_k + m_k + gen_k − load_k − p_k = 0` |
+| inequalities | `u_min ≤ u_k ≤ u_max`, `p_k ≥ 0`, `x_min ≤ x_k ≤ x_max` (`m` is free) |
+| domain | `p_k > 0` (needed by `a/p_k`) |
+
+The JuMP model writes the three non-smooth terms in epigraph form
+(`su ≥ ±u`, `sm ≥ 0, sm ≥ m`, `sd ≥ 0, sd ≥ a/p − 1`), which makes it an SOCP and
+equals the closed form above at the optimum; that closed form is also the
+`model === nothing` branch of `(obj::eco_mpc)(m,u,p,model)`.
+
+**Verified:** Ipopt on the nominal instance (`x0 = 0.5`, first 96 CSV samples)
+gives `J = 36479.1113`, matching the hard-coded `Jopt = 36479.1` in
+`examples/power_grid/preprocess.jl`, and the Python objective reproduces it to
+1e-16 relative.
+
+## 2. DC3 adaptation
+
+**Decision vector.** `x_0` is a known parameter, so
+
+```
+y = [ m_1..m_N | u_1..u_N | p_1..p_N | x_1..x_N ]      n_y  = 4N = 384
+A_eq y = b_eq(x0, load, gen)                            n_eq = 2N+1 = 193
+g(y) ≤ 0                                                n_ineq = 5N = 480
+```
+
+`A_eq` is exactly the matrix `M` assembled by
+`examples/power_grid/utils.jl::dynamics_projection` (same row order: `N` dynamics
+rows, the terminal row, then `N` power-flow rows).
+
+**Variable partition** (`n_y − n_eq = 2N−1 = 191` predicted variables):
+
+```
+P = { u_1 … u_{N−1} } ∪ { p_1 … p_N }
+D = { u_N } ∪ { x_1 … x_N } ∪ { m_1 … m_N }
+```
+
+**Completion** is the generic linear solve `y_D = A_D⁻¹(b_eq − A_P y_P)`, but the
+partition was chosen so that it is block-triangular and interpretable:
+
+```
+x_k = x0 + B·Σ_{i≤k} u_i        (k = 1..N−1)     forward recursion
+x_N = x0                                          terminal row
+u_N = (x_N − A x_{N−1})/B       ⟺  Σ_k u_k = 0 when A = 1
+m_k = load_k − gen_k − u_k + p_k                  power-flow rows
+```
+
+`validate.py` asserts that the generic solve reproduces this closed form to
+2·10⁻¹³.
+
+**Assumption check.** `rank(A_eq) = 193 = n_eq` (full row rank) and `A_D` is
+invertible with **`cond(A_D) = 5.57·10⁴`**, `log|det A_D| = −7.6`.  The
+conditioning is not benign: a `2·10⁻¹²` equality residual in a reference
+solution is amplified to `3·10⁻⁷` when that solution is re-completed from its
+partial part.  It is reported in every result file, it is why this application
+runs in **float64**, and `partition.cond_warn` makes it a hard failure above a
+configurable threshold.
+
+**Correction and why row scaling is needed.**  All inequalities are affine, so
+`G_eff = G_P − G_D·(A_D⁻¹A_P)` is a constant `480 × 191` matrix and the
+correction gradient `2·relu(g)ᵀ G_eff` is closed form.  However the row norms of
+`G_eff` span four orders of magnitude:
+
+| rows | `‖G_eff,i‖` | meaning |
+|---|---|---|
+| `u` bounds | 0.10 – 1.0 (after normalisation) | `∂u/∂u = 1` |
+| `p ≥ 0` | 1.0 | `p` is a partial variable |
+| `x` bounds | up to **2000** | `∂x/∂u = B = −5·10⁻⁴` |
+| `x_N` bounds | **0** | pinned by the terminal equality |
+
+With a single `corr_lr`, DC3's plain gradient step therefore either diverges on
+the power rows or makes no progress at all on the state-of-charge rows (measured:
+≈2·10⁻⁷ movement per step, i.e. ~10⁶ steps to fix a 0.2 violation).  The
+implementation therefore rescales the rows of the *internal* residual by
+`1/‖G_eff,i‖` (normalised to a median of 1) — equivalent to measuring the SOC in
+kWh rather than as a fraction.  The two rows with an identically zero reduced
+gradient (the bounds on `x_N`, which the terminal equality pins to `x0`) are given
+weight 1 instead of `1/0`; amplifying their round-off would otherwise manufacture
+spurious violations of size `corr_eps`.
+**All reported metrics use the unscaled, original constraints.**
+Set `dc3.ineq_row_scale = "none"` to reproduce the unscaled behaviour.
+
+**Objective domain.** `a/p_k` needs `p_k > 0`; a randomly initialised network
+gives `p ≈ 0` and an objective of ~10¹³.  Two measures:
+
+* the read-out is `p = p_margin + softplus(·)` and `u = u_min + σ(·)(u_max − u_min)`
+  (DC3's ACOPF read-out generalised to one-sided bounds), with the bias
+  initialised so the first prediction is `u = 0`, `p = a = 50` — an idle battery
+  at the comfort setpoint;
+* DC3's internal constraint set uses `p ≥ p_margin` (default `10⁻³`) instead of
+  `p ≥ 0`. Tightening can only make DC3 more conservative, so feasibility
+  reported against the original `p ≥ 0` remains valid.  `domain_max = max(−p)` is
+  reported separately and `p_safe_eps` clamps the objective argument so a
+  violating point yields a large finite number rather than `inf`.
+
+**Network input.** `[x0, load_{1..N}, gen_{1..N}]`, `x_dim = 2N+1 = 193`
+(`feature_mode = "x0_netload"` uses `[x0, load−gen]` instead).
+
+## 3. Data — how a *family* of instances is obtained
+
+`energy_mag()` defines a **single** instance.  DC3 is a parametric solver, so
+`data.py` varies only the quantities the JuMP model already exposes as
+`MOI.Parameter`:
+
+* `x0 ~ U(0.25, 0.75)` — brackets the pool used for the ADMM training data in
+  `data_eMPC_power.jl` (`train_pool = [1/2, 2/3, 3/4]`, `test_pool = [3/5]`);
+* `(load, gen)` = the length-`N` window of the two CSVs starting at offset `s`,
+  with `s` drawn from an offset pool.  The 97 admissible offsets are split
+  **disjointly** 60/20/20 between train/validation/test, so no forecast window is
+  shared between splits.
+
+The **nominal benchmark instance** (`x0 = 0.5`, `s = 0`) is forced to be test
+instance 0, so the published `Jopt = 36479.1` can be checked directly.
+
+The plant, the cost function and every constant are untouched.
+
+> The `.npz` files under `data/training_data/eco_mpc-*` are **not** instances of
+> this problem: they are `(q, Moreau-envelope value, gradient)` samples of the
+> *per-timestep prox subproblem* used to fit the ICNN of LME-ADMM.  They are
+> unrelated to DC3's training data and are not used here.
+
+## 4. Reference solver
+
+`reference.py` solves the SOCP with cvxpy + **Clarabel** at `tol = 1e-9`
+(`a/p` enters as `cp.pos(a*cp.inv_pos(p) − 1)`).  Ipopt on the same instances is
+produced by `DC3/julia/baselines_power.jl`, and `validate.py` checks that the
+Python objective, the cvxpy solution and Ipopt all agree.
+
+## 5. Commands
+
+```bash
+# from the repository root, with DC3/.venv activated (see DC3/README.md)
+python -m DC3.validate --app power                      # formulation + gradient checks
+python -m DC3.power_grid.train     --tag default
+python -m DC3.power_grid.benchmark --tag default
+
+# repository baselines on the same test instances (Ipopt + LME-ADMM split)
+julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default
+python -m DC3.report --app power_grid --tag default
+
+# hyper-parameter search on the validation split only
+python -m DC3.tune --app power_grid \
+    --grid '{"dc3.corr_lr":[1e-3,1e-2],"dc3.obj_scale":[100,1000]}' --set dc3.epochs=80
+```
+
+## 6. Deviations from the paper / official code
+
+| | |
+|---|---|
+| Problem | the repository's economic MPC, **not** the paper's AC-OPF. |
+| Completion | `h` is affine, so DC3's Newton completion collapses to one linear solve. |
+| Correction space | steps in `z` (partial) space; identical to DC3's full-space update for affine completion (asserted in `validate.py`). |
+| Row scaling | `1/‖G_eff,i‖` on the internal residuals (see §2). Not in DC3; without it the correction cannot fix the SOC bounds. Disable with `dc3.ineq_row_scale="none"`. |
+| Read-out | `σ`-box on `u`, `softplus` on `p`, bias initialised at `(u,p) = (0, a)`. DC3 uses a `sigmoid` read-out for ACOPF; the one-sided variant is new. |
+| Constraint margin | `p ≥ p_margin = 10⁻³` internally (tightening only). |
+| Soft loss | `soft_loss_power` = norm (official code, default) or squared norm (paper); `obj_scale` divides the objective term — needed here because `J ≈ 3.6·10⁴` while violations are O(1). |
+| `soft_weight_eq_frac` | defaults to 0: with completion the equality residual is ~10⁻¹⁴, so the equality term of the soft loss carries no signal. |
+| Inconsistency in the Julia code (documented, not changed) | `aux_solver_eco` in `eMPC_ADMM.jl` declares `p[1:N] .>= 1` while `mpc_eco_solver` and `aux_solver_eco_data` use `p .>= 0`. DC3 uses `p ≥ 0`, matching the model that defines `Jopt`. |
+
+## 7. Executed results
+
+Run end to end on this machine (Apple M5 Pro, CPU, float64, torch 2.14.0,
+6 torch threads), `N = 96`, 500 test instances, feasibility threshold 1e-4 on the
+equality residual, the inequality violation *and* the objective-domain violation.
+Full table: `results/power_grid-default/REPORT.md`.
+
+| method | obj (mean) | gap % mean | gap % max | feasible rate | max \|h\| | max violation | latency (ms) |
+|---|---|---|---|---|---|---|---|
+| Clarabel (reference) | 37499.08 | 0 | 0 | 1.000 | 6.0e-9 | 7.7e-9 | 9.61* |
+| Ipopt, tol 1e-10 (repo ground truth) | 37499.08 | 0 | 0 | 1.000 | — | — | 13.66 |
+| Ipopt, early stop @0.01 % | 37499.10 | 0.0047 | 0.0099 | 1.000 | — | — | 10.80 |
+| LME-ADMM (split) | 37278.79 | 0.563 | 9.54 | **0.506** | 1.6e-14 | 3.1e-1 | 3.10 |
+| **DC3** | 39687.2 | **5.83** | 33.6 | **1.000** | 7.1e-14 | 9.1e-6 | **0.735** |
+| DC3, no correction | 137097 | 267 | 1187 | 0.000 | 2.4e-12 | 2.1e+4 | 0.044 |
+
+\* the cvxpy row re-canonicalises on every call; use the Ipopt rows for solver speed.
+
+**Reference cross-check.** Julia/Ipopt (tol 1e-10) and Python/Clarabel (tol 1e-9)
+agree to `9.0e-9` relative on all 500 instances, and both return `36479.1113` on
+the nominal instance — the value hard-coded as `Jopt = 36479.1` in
+`examples/power_grid/preprocess.jl`.
+
+**Reading the table.**  DC3 is ~4x faster than the learned ADMM baseline and
+~15x faster than Ipopt, and it is feasible on every instance — but its objective
+gap (5.8 % mean, 33.6 % worst case) is an order of magnitude worse than
+LME-ADMM's 0.56 %.  Conversely LME-ADMM is feasible on only 50.6 % of instances:
+its stopping rule (`sLME_ADMM_callback`) is an *optimality-gap* test, so it
+returns points with inequality violations up to 0.31 while DC3's correction
+targets feasibility directly.  The two methods are therefore not interchangeable,
+and the gap column alone would be misleading for either of them.
+
+**Correction.**  500 steps were used for the 500-instance batch (the cap), 97.6 %
+of instances met DC3's internal `corr_eps` criterion and 12 did not — yet the
+feasible rate against the *original* constraints is 1.000, because the internal
+criterion is the tightened, row-scaled one.  Median first-feasible step is 9.4,
+worst case 194.  Without correction nothing is feasible (max violation 2.1e4 kW),
+so the correction is doing the essential work here, not the network alone.
+
+**Latency.**  Stage breakdown at batch 1: predict 0.044 ms, complete 0.013 ms,
+correct 0.46 ms.  DC3's test-time loop is batch-global (it runs until the *worst*
+instance in the batch converges), so `ms/instance` is not monotone in batch size:
+0.56 ms at batch 1, 0.10 ms at batch 32, but 2.6 ms at batch 500.  Training took
+635 s and is excluded from every latency figure; the tuning runs that preceded it
+are additional and are reported in `results/power_grid-tune/tune_results.json`.

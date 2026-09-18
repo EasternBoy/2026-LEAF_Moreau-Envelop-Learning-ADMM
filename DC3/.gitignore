@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+
+# Large artifacts that are fully regenerable:
+#   * checkpoints      -> `python -m DC3.<app>.train`
+#   * test_instances   -> deterministic from `data.seed` (see each app's data.py);
+#                         the small eco-MPC set is kept, the cone sets are not
+#                         (75 MB at n=1000, m=100)
+#   * dc3_solutions    -> `python -m DC3.<app>.benchmark`
+results/**/checkpoint.pt
+results/**/dc3_solutions.npz
+results/cone_programming-*/test_instances.npz

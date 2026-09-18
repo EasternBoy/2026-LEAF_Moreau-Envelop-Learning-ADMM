@@ -1,0 +1,36 @@
+{
+    "methods": {
+        "sLME-ADMM": {
+            "gap_pct_mean": 0.003186176680489823,
+            "note": "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM, stopped by sLME_ADMM_callback",
+            "eq_max": 1.1102230246251565e-15,
+            "obj_mean": -4.5510740655892725,
+            "latency_median_ms": 0.37977099999999997,
+            "gap_pct_max": 0.05344532661515181,
+            "feasible_rate": 0.02,
+            "ineq_max": 0.0020080461820737305
+        },
+        "LME-ADMM": {
+            "note": "not_run: needs Gurobi for aux_solver_gen"
+        },
+        "Ipopt(early-stop)": {
+            "gap_pct_mean": 0.003504025253400271,
+            "note": "Ipopt stopped by Ipopt_callback_BM at 0.01% relative gap",
+            "obj_mean": -4.550890401450949,
+            "latency_median_ms": 1.0905265808105469,
+            "gap_pct_max": 0.009897120337693245,
+            "feasible_rate": 1
+        },
+        "Ipopt(tol=1e-8)": {
+            "gap_pct_mean": 0,
+            "note": "ground-truth reference of examples/cone_programming/benchmarkOG.jl",
+            "obj_mean": -4.551049881168977,
+            "latency_median_ms": 1.5704631805419922,
+            "gap_pct_max": 0,
+            "feasible_rate": 1
+        }
+    },
+    "note": "produced by DC3/julia/baselines_cone.jl on DC3's exported test instances; Gurobi-based baselines (LME_ADMM with aux_solver_gen) were not run - no license.",
+    "max_opt_gap": 0.01,
+    "n_instances": 500
+}

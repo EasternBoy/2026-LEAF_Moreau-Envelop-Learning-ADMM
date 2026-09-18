@@ -1,0 +1,57 @@
+{
+  "_comment": "Smaller size also benchmarked by the repository (data/solving_data/maxEntropy-n=100m=10-*.npz). dc3.corr_lr / lr / soft_weight were selected by DC3/tune.py on the VALIDATION split only (see results/cone_programming-tune-small/tune_results.json).",
+  "problem": {
+    "n": 100,
+    "m": 10,
+    "feature_mode": "A_flat_b",
+    "w_margin": 0.0,
+    "ineq_margin": 0.0
+  },
+  "data": {
+    "n": 100,
+    "m": 10,
+    "seed": 0,
+    "n_train": 8000,
+    "n_valid": 500,
+    "n_test": 500
+  },
+  "partition": {
+    "strategy": "explicit",
+    "strict": true,
+    "cond_warn": 10000000000.0
+  },
+  "reference": {
+    "solver": "CLARABEL",
+    "tol": 1e-09,
+    "ignore_w_floor": true
+  },
+  "dc3": {
+    "hidden_size": 512,
+    "n_hidden": 2,
+    "dropout": 0.0,
+    "batch_norm": true,
+    "input_norm": true,
+    "lr": 0.001,
+    "epochs": 800,
+    "batch_size": 64,
+    "soft_weight": 1.0,
+    "soft_weight_eq_frac": 0.5,
+    "soft_loss_power": 1,
+    "obj_scale": 1.0,
+    "use_compl": true,
+    "use_train_corr": true,
+    "use_test_corr": true,
+    "corr_mode": "partial",
+    "corr_train_steps": 10,
+    "corr_test_max_steps": 1000,
+    "corr_eps": 0.0001,
+    "corr_lr": 0.01,
+    "corr_momentum": 0.5,
+    "seed": 0,
+    "device": "cpu",
+    "dtype": "float64",
+    "eval_every": 5,
+    "feas_tol": 0.0001,
+    "lr_decay": 0.995
+  }
+}
