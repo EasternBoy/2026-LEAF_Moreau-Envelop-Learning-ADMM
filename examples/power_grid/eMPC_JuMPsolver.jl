@@ -1,5 +1,6 @@
-function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct} = nothing, init_val::Union{Matrix{FloatType}, Nothing} = nothing)
+function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct} = nothing, init_val::Union{Matrix{FloatType}, Nothing} = nothing; configure = identity)
     model = pick_solver(name, tol, cbs)
+    configure(model)
 
     N    = mpc_para.N
     BESS = mpc_para.BESS
@@ -53,9 +54,9 @@ function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct
     end
 
     function solver(init::FloatType, load::Vector{FloatType}, generator::Vector{FloatType}; verbose = false)
-        MOI.set.(model, POI.ParameterValue(), model[:load], load)
-        MOI.set.(model, POI.ParameterValue(), model[:generator], generator)
-        MOI.set.(model, POI.ParameterValue(), model[:x0], init)
+        set_parameter_value.(model[:load], load)
+        set_parameter_value.(model[:generator], generator)
+        set_parameter_value(model[:x0], init)
 
         optimize!(model)
 

@@ -1,0 +1,39 @@
+{
+    "case_tag": "N=96_residual_ipopt=1e-10_admm=1e-02_others=1e-04",
+    "primary_scalar_variables": 288,
+    "measured_samples": 1000,
+    "benchmark_mode": "optimality_gap",
+    "results_file": "results_N=96_residual_ipopt=1e-10_admm=1e-02_others=1e-04.csv",
+    "julia_version": "1.12.3",
+    "max_iter": 1000,
+    "N": 96,
+    "gc_every": 1,
+    "blas_threads": 10,
+    "g_opt_pct": null,
+    "timing": "Existing solver-returned seconds; split solver uses internal elapsed time",
+    "methods": [
+        "IPOPT",
+        "MadNLP",
+        "ADMM",
+        "MEL-ADMM",
+        "sMEL-ADMM"
+    ],
+    "residual_tolerances": {
+        "IPOPT": 1.0e-10,
+        "MadNLP": 0.0001,
+        "sMEL-ADMM": 0.0001,
+        "ADMM": 0.01,
+        "MEL-ADMM": 0.0001
+    },
+    "madnlp_gap_callback": true,
+    "summary_file": "summary_N=96_residual_ipopt=1e-10_admm=1e-02_others=1e-04.csv",
+    "x0_distribution": "Uniform(0.2, 0.8)",
+    "DC3": "Not run; reuse test_instances_N=96_residual_ipopt=1e-10_admm=1e-02_others=1e-04.npz, including its J_opt references",
+    "discarded_warmups_per_solver_per_gap": 1,
+    "reference_tolerance": 1.0e-10,
+    "summary_std": "Sample standard deviation across all measured instances, not standard error",
+    "julia_threads": 10,
+    "feasibility_tolerance": 1.0e-6,
+    "instances_file": "test_instances_N=96_residual_ipopt=1e-10_admm=1e-02_others=1e-04.npz",
+    "seed": 2026
+}

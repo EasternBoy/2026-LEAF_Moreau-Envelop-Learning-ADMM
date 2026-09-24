@@ -11,6 +11,8 @@ from ..common.runner import add_common_args, apply_overrides, load_config, run_b
 from ..report import write_report
 from .experiment import SPEC
 
+N = None  # Set an integer to override both config horizons; None uses the config.
+
 
 def main():
     ap = argparse.ArgumentParser(description="benchmark DC3 on power_grid")
@@ -22,7 +24,11 @@ def main():
     ap.add_argument("--n-warmup", type=int, default=10)
     ap.add_argument("--batch-sizes", type=int, nargs="*", default=[1, 8, 32, 100])
     a = ap.parse_args()
-    cfg = apply_overrides(load_config(SPEC, a.config), a.set)
+    cfg = load_config(SPEC, a.config)
+    if N is not None:
+        cfg["problem"]["N"] = N
+        cfg["data"]["N"] = N
+    cfg = apply_overrides(cfg, a.set)
     run_benchmark(SPEC, cfg, tag=a.tag, checkpoint=a.checkpoint,
                   force_reference=a.force_reference, skip_reference=a.skip_reference,
                   n_repeat=a.n_repeat, n_warmup=a.n_warmup, batch_sizes=tuple(a.batch_sizes))

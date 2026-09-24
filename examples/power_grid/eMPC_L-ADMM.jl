@@ -94,7 +94,9 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
             tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false)
 
             fill!(z, 0.)
+            fill!(w, 0.)
             fill!(v, 0.)
+            fill!(α, 0.)
             fill!(β, 0.)
 
             J = 0

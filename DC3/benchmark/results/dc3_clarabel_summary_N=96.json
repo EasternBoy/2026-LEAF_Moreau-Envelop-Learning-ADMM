@@ -1,0 +1,16 @@
+{
+  "case_tag": "N=96",
+  "instances_file": "/Users/trinhtran/Library/CloudStorage/OneDrive-UniversityofCentralFlorida/Tringtringbling/09.Github/2026-LEAF_Moreau-Envelop-Learning-ADMM-3/data/solving_data/power_table_inputs/test_instances_N=96.npz",
+  "checkpoint": "/Users/trinhtran/Library/CloudStorage/OneDrive-UniversityofCentralFlorida/Tringtringbling/09.Github/2026-LEAF_Moreau-Envelop-Learning-ADMM-3/DC3/results/power_grid-table-N96-v2/checkpoint.pt",
+  "samples": 1000,
+  "device": "cpu",
+  "dtype": "torch.float64",
+  "max_iter": 500,
+  "reference_solver": "CLARABEL via DC3.power_grid.reference.solve_instance (tol=1e-9)",
+  "gap_definition": "100 * abs(DC3 objective - CLARABEL objective) / abs(CLARABEL objective)",
+  "opt_gap_mean_pct": 0.9863714855422805,
+  "opt_gap_max_pct": 26.115020371709036,
+  "solve_time_mean_ms": 1.0668076243018731,
+  "solve_time_std_ms": 0.13614388913280612,
+  "per_instance_file": "/Users/trinhtran/Library/CloudStorage/OneDrive-UniversityofCentralFlorida/Tringtringbling/09.Github/2026-LEAF_Moreau-Envelop-Learning-ADMM-3/DC3/benchmark/results/dc3_clarabel_results_N=96.csv"
+}
