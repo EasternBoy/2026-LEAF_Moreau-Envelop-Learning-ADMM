@@ -9,15 +9,14 @@
 ## Objective, optimality gap and feasibility
 
 ```
-method              obj (mean)  gap% mean  gap% max  gap% mean(feas)  feas rate  max |h|   max viol  latency ms
-------------------  ----------  ---------  --------  ---------------  ---------  --------  --------  ----------
-CLARABEL(cvxpy)     -4.55105    0          0         -                1.000      3.55e-11  0.00e+00  2.988     
-DC3                 -4.51568    0.7771     8.698     0.7771           1.000      1.11e-16  9.77e-05  0.729     
-DC3(no correction)  -4.44072    3.675      62.47     -                0.000      2.22e-16  6.05e-02  0.05275   
-sLME-ADMM           -4.55107    0.003186   0.05345   -                0.020      1.11e-15  2.01e-03  0.3798    
-LME-ADMM            -           -          -         -                -          -         -         -         
-Ipopt(early-stop)   -4.55089    0.003504   0.009897  -                1.000      -         -         1.091     
-Ipopt(tol=1e-8)     -4.55105    0          0         -                1.000      -         -         1.57      
+method             obj (mean)  gap% mean  gap% max   gap% mean(feas)  feas rate  max |h|   max viol  latency ms
+-----------------  ----------  ---------  ---------  ---------------  ---------  --------  --------  ----------
+CLARABEL(cvxpy)    -4.55105    0          0          -                1.000      3.55e-11  0.00e+00  2.988     
+DC3 + correction   -4.51568    0.7771     8.698      0.7771           1.000      1.11e-16  9.77e-05  0.729     
+sLME-ADMM          -4.55104    0.0001932  0.0007249  -                1.000      1.22e-15  4.94e-06  1.36      
+LME-ADMM           -           -          -          -                -          -         -         -         
+Ipopt(early-stop)  -4.54911    0.0427     0.09336    -                1.000      -         9.99e-16  0.8634    
+Ipopt(tol=1e-8)    -4.55105    0          0          -                1.000      -         -         1.449     
 ```
 
 The `CLARABEL(cvxpy)` row is the **reference**: its gap is 0 by definition.  Its

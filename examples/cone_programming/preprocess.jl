@@ -6,6 +6,7 @@ end
 
 
 J_opt::FloatType = 1.
+ipopt_feas_tol::FloatType = 1e-4   # early-stop feasibility tolerance on w (see Ipopt_callback_BM)
 
 function Ipopt_callback_BM(
    alg_mod::Cint,
@@ -21,7 +22,9 @@ function Ipopt_callback_BM(
    ls_trials::Cint,
 )
     rel_opt_gap = 100abs((J_opt - obj_value/scale)/J_opt)
-    stop = rel_opt_gap < max_opt_gap
+    # also require primal feasibility: inf_pr is the constraint violation in x = scale*w,
+    # so inf_pr < ipopt_feas_tol*scale means a violation below ipopt_feas_tol in w
+    stop = rel_opt_gap < max_opt_gap && inf_pr < ipopt_feas_tol*scale
 
     return !stop #False means running, True means stopping
 end

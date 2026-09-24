@@ -18,7 +18,7 @@ Attribution and the upstream license are in
 [`common/NOTICE.md`](common/NOTICE.md) and
 [`common/LICENSE-Apache-2.0-DC3`](common/LICENSE-Apache-2.0-DC3).
 
-## Layout
+## Layoutone_programming-small/REPORT.md
 
 ```
 DC3/
@@ -138,28 +138,32 @@ n=1000) relative.
 |---|---|---|---|---|---|
 | eco-MPC, N=96, 500 inst. | Ipopt (early stop) | 0.0047 | 1.000 | 10.80 | — |
 | | LME-ADMM (split) | 0.563 | 0.506 | 3.10 | — |
-| | **DC3** | 5.83 | **1.000** | **0.735** | 635 |
-| | DC3, no correction | 267 | 0.000 | 0.044 | — |
-| cone, n=100, m=10, 500 inst. | Ipopt (early stop) | 0.0035 | 1.000 | 1.09 | — |
-| | sLME-ADMM | 0.0032 | 0.020 | 0.38 | — |
-| | **DC3** | 0.777 | **1.000** | **0.73** | 610 |
-| | DC3, no correction | 3.675 | 0.000 | 0.053 | — |
-| cone, n=1000, m=100, 100 inst. | Ipopt (early stop) | 0.0042 | 1.000 | 58.6 | — |
-| | sLME-ADMM | 0.0094 | 0.990 | 12.9 | — |
-| | **DC3** | **75.4** | **0.000** | 138.8 | 480 |
-| | DC3, no correction | 5.14 | 0.000 | 1.51 | — |
+| | **DC3 + correction** | 5.83 | **1.000** | **0.735** | 635 |
+| cone, n=100, m=10, 500 inst. | Ipopt (early stop @0.1 %) | 0.043 | 1.000 | 0.86 | — |
+| | sLME-ADMM | 0.00019 | 1.000 | 1.36 | — |
+| | **DC3 + correction** | 0.777 | **1.000** | **0.73** | 610 |
+| cone, n=1000, m=100, 100 inst. | Ipopt (early stop @0.1 %) | 0.049 | 1.000 | 51.6 | — |
+| | sLME-ADMM | 0.0032 | 1.000 | 40.2 | — |
+| | **DC3 + correction** | **75.4** | **0.000** | 138.8 | 480 |
 
 Headlines:
 
 * **DC3 buys feasibility with optimality.**  On both problems where it works it
-  is the only method with a 100 % feasible rate and the lowest latency, but its
-  objective gap is 1–3 orders of magnitude worse than the repository's learned
-  ADMM.  The ADMM baselines stop on an *optimality-gap* test and consequently
-  return points that violate the inequalities (50.6 % feasible for the eco-MPC,
-  2.0 % for the small cone program).  Reporting gap without feasibility, or
+  has a 100 % feasible rate and the lowest latency, but its objective gap is
+  1–5 orders of magnitude worse than the repository's learned ADMM.  The
+  eco-MPC LME-ADMM stops on an *optimality-gap* test and returns points that
+  violate the inequalities (50.6 % feasible).  For the cone program both
+  baselines now require feasibility as well as the gap: sLME-ADMM stops when
+  the gap (< 0.1 %) *and* the ADMM residual (< 1e-3) are met, Ipopt when the
+  gap *and* its primal infeasibility are small.  Both are feasible on every
+  instance; sLME-ADMM takes 1.36 ms (n=100, median 21 iterations) and 40 ms
+  (n=1000, median 91.5 iterations, none at the cap).  Reporting gap without feasibility, or
   feasibility without gap, would misrepresent either method.
-* **Correction does the heavy lifting.**  Network + completion alone is feasible
-  on 0 % of instances in every configuration.
+* **DC3 is always run with correction.**  Test-time correction runs until every
+  instance in the batch meets `corr_eps = 1e-4` or a step cap is hit (cap 500 for
+  the eco-MPC, 1000 for cone n=100, 2000 for cone n=1000); training unrolls 10
+  differentiable correction steps.  Steps actually used: 500 (eco-MPC, cap),
+  119 (cone n=100, converged), 2000 (cone n=1000, cap, not converged).
 * **DC3 does not scale to the n=1000 cone program** — the completion amplifies
   prediction error by `‖A_D⁻¹A_P‖₂ = √(n−1) = 31.6`, which is intrinsic to the
   simplex constraint and independent of the partition.  Details and the

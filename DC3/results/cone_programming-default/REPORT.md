@@ -9,15 +9,14 @@
 ## Objective, optimality gap and feasibility
 
 ```
-method              obj (mean)  gap% mean  gap% max  gap% mean(feas)  feas rate  max |h|   max viol  latency ms
-------------------  ----------  ---------  --------  ---------------  ---------  --------  --------  ----------
-CLARABEL(cvxpy)     -6.33571    0          0         -                1.000      2.31e-10  0.00e+00  1138      
-DC3                 -1.5639     75.35      89.09     -                0.000      1.11e-16  2.15e-03  138.8     
-DC3(no correction)  -6.00998    5.137      8.686     -                0.000      1.11e-16  1.42e-01  1.514     
-sLME-ADMM           -6.33548    0.009418   0.2915    -                0.990      4.00e-15  2.45e-04  12.87     
-LME-ADMM            -           -          -         -                -          -         -         -         
-Ipopt(early-stop)   -6.33545    0.004163   0.008407  -                1.000      -         -         58.6      
-Ipopt(tol=1e-8)     -6.33571    0          0         -                1.000      -         -         97.73     
+method             obj (mean)  gap% mean  gap% max  gap% mean(feas)  feas rate  max |h|   max viol  latency ms
+-----------------  ----------  ---------  --------  ---------------  ---------  --------  --------  ----------
+CLARABEL(cvxpy)    -6.33571    0          0         -                1.000      2.31e-10  0.00e+00  1138      
+DC3 + correction   -1.5639     75.35      89.09     -                0.000      1.11e-16  2.15e-03  138.8     
+sLME-ADMM          -6.33551    0.003176   0.01668   -                1.000      3.11e-15  5.50e-08  40.23     
+LME-ADMM           -           -          -         -                -          -         -         -         
+Ipopt(early-stop)  -6.33262    0.04884    0.09958   -                1.000      -         9.39e-05  51.55     
+Ipopt(tol=1e-8)    -6.33571    0          0         -                1.000      -         -         97.23     
 ```
 
 The `CLARABEL(cvxpy)` row is the **reference**: its gap is 0 by definition.  Its

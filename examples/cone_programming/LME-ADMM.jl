@@ -97,7 +97,7 @@ end
 
 
 @inbounds function sLME_ADMM(data::data_opt, gradient::gradient_struct, callback::Union{Function, Nothing} =  nothing; 
-    tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false)
+    tol::FloatType = 1e-2, max_iter::Int = 1000, verbose::Bool = false)
 
     n = data.n
     m = data.m
@@ -158,20 +158,20 @@ end
         @. α += ρ * buffer1
         @. β += ρ * buffer2
 
-        CALL_BACK_STATUS = false
+        CALL_BACK_STATUS = true   # without a callback, stop on the residual alone
 
         if callback !== nothing
-            J = get_objective(data, w ./ scale)
+            J = get_objective(data, w[1:n] ./ scale)   # w = [x; s]: exclude the m slacks
             CALL_BACK_STATUS = callback(z, w, α, v, β, i, J)
         end
-        
+
         residual = max(maximum(abs.(buffer1)), maximum(abs.(buffer2)))
-        TERMINATION_STATUS = CALL_BACK_STATUS || (residual < tol)
+        TERMINATION_STATUS = CALL_BACK_STATUS && (residual < tol)
 
         ## ============== Check termination ===========
         if TERMINATION_STATUS
             if verbose
-                J = get_objective(data, w ./ scale)
+                J = get_objective(data, w[1:n] ./ scale)
                 println("sLME-ADMM converges at iteration $i with objective value = $J and residual = $residual")  
             end
             break 

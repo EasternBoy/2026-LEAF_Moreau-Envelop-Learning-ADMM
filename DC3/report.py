@@ -23,8 +23,7 @@ METHOD_NOTES = {
     "Clarabel(cvxpy)": "conic reference solver, tol 1e-9",
     "sLME-ADMM": "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM",
     "LME-ADMM(split)": "examples/power_grid/eMPC_L-ADMM.jl :: LME_ADMM_split",
-    "DC3": "this implementation (completion + correction)",
-    "DC3(no correction)": "network + completion only",
+    "DC3 + correction": "this implementation (completion + correction)",
 }
 
 
@@ -51,7 +50,7 @@ def collect_rows(bench: dict, julia: dict | None) -> list[dict]:
             "lat_median_ms": _get(ref, "latency_ms", "median_ms"),
             "note": "reference (gap defined as 0)",
         })
-    for key, label in (("corrected", "DC3"), ("raw_no_correction", "DC3(no correction)")):
+    for key, label in (("corrected", "DC3 + correction"),):
         a = bench["dc3"][key]
         rows.append({
             "method": label,

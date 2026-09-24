@@ -25,7 +25,7 @@ count_, m_, n_ = size(Ainst)
 
 const n::Int = n_
 const m::Int = m_
-const max_opt_gap::FloatType = length(ARGS) >= 2 ? parse(FloatType, ARGS[2]) : 0.01
+const max_opt_gap::FloatType = length(ARGS) >= 2 ? parse(FloatType, ARGS[2]) : 0.1
 # benchmarkOG.jl uses `max(div(n, nthreads())+1, 50)`.  That formula exceeds `n`
 # when Julia runs single-threaded (or when n is small), and examples/cone_programming/
 # utils.jl::mini_batch then indexes out of bounds - so it is additionally clamped to n.
@@ -43,10 +43,11 @@ include(joinpath(REPO, "examples", "cone_programming", "LME-ADMM.jl"))
 mgrad = gradient_struct(model, s_mb, 1)
 
 J_ipopt_hi = zeros(count_);  t_ipopt_hi = zeros(count_)
-J_ipopt_bm = zeros(count_);  t_ipopt_bm = zeros(count_)
+J_ipopt_bm = zeros(count_);  t_ipopt_bm = zeros(count_);  viol_bm = zeros(count_)
 J_slme     = zeros(count_);  t_slme     = zeros(count_)
 eq_slme    = zeros(count_);  in_slme    = zeros(count_)
 W_slme     = zeros(count_, n)
+it_slme    = zeros(Int, count_)
 
 for k in 1:count_
     global J_opt
@@ -59,11 +60,14 @@ for k in 1:count_
     J_ipopt_hi[k] = J_opt; t_ipopt_hi[k] = t_hi
 
     # Ipopt with the repo's optimality-gap callback (the benchmark setting)
-    _, t_bm, J_bm = JuMP_solver("Ipopt", para, 1e-2, callback_struct())
+    w_bm, t_bm, J_bm = JuMP_solver("Ipopt", para, 1e-2, callback_struct())
     J_ipopt_bm[k] = J_bm; t_ipopt_bm[k] = t_bm
+    viol_bm[k] = max(maximum(A * w_bm .- b), maximum(-w_bm), abs(sum(w_bm) - 1), 0.0)
 
     # learned splitting ADMM (Gurobi free)
-    sol, t_s, J_s = sLME_ADMM(para, mgrad, sLME_ADMM_callback)
+    it = Ref(0)
+    sol, t_s, J_s = sLME_ADMM(para, mgrad, (args...) -> (it[] = args[6]; sLME_ADMM_callback(args...)))
+    it_slme[k] = it[]
     w = Vector{FloatType}(sol[1:n])
     J_slme[k]  = sum(x -> x > 0 ? x * log(x) : 0.0, w)
     t_slme[k]  = t_s
@@ -91,8 +95,9 @@ result = Dict(
         "obj_mean" => mean(J_ipopt_bm),
         "gap_pct_mean" => mean(gap(J_ipopt_bm, J_ipopt_hi)),
         "gap_pct_max"  => maximum(gap(J_ipopt_bm, J_ipopt_hi)),
-        "latency_median_ms" => 1e3median(t_ipopt_bm), "feasible_rate" => 1.0,
-        "note" => "Ipopt stopped by Ipopt_callback_BM at $(max_opt_gap)% relative gap"),
+        "latency_median_ms" => 1e3median(t_ipopt_bm),
+        "ineq_max" => maximum(viol_bm), "feasible_rate" => mean(viol_bm .<= 1e-4),
+        "note" => "Ipopt stopped by Ipopt_callback_BM at $(max_opt_gap)% relative gap and inf_pr < 1e-4*scale"),
     "sLME-ADMM" => Dict(
         "obj_mean" => mean(J_slme),
         "gap_pct_mean" => mean(gap(J_slme, J_ipopt_hi)),
@@ -100,7 +105,10 @@ result = Dict(
         "latency_median_ms" => 1e3median(t_slme),
         "eq_max" => maximum(eq_slme), "ineq_max" => maximum(in_slme),
         "feasible_rate" => mean((eq_slme .<= 1e-4) .& (in_slme .<= 1e-4)),
-        "note" => "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM, stopped by sLME_ADMM_callback"),
+        "iterations_median" => median(it_slme), "iterations_mean" => mean(it_slme),
+        "iterations_min" => minimum(it_slme), "iterations_max" => maximum(it_slme),
+        "iterations_at_cap" => sum(it_slme .>= 1000),
+        "note" => "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM, stopped when sLME_ADMM_callback (gap < max_opt_gap) AND ADMM residual < 1e-3"),
     "LME-ADMM" => Dict("note" => "not_run: needs Gurobi for aux_solver_gen"),
   ))
 
@@ -109,7 +117,7 @@ open(joinpath(out_dir, "julia_baselines.json"), "w") do f
 end
 npzwrite(joinpath(out_dir, "julia_baselines.npz"),
          Dict("J_ipopt_hi" => J_ipopt_hi, "t_ipopt_hi" => t_ipopt_hi,
-              "J_ipopt_bm" => J_ipopt_bm, "t_ipopt_bm" => t_ipopt_bm,
+              "J_ipopt_bm" => J_ipopt_bm, "t_ipopt_bm" => t_ipopt_bm, "viol_ipopt_bm" => viol_bm,
               "J_slme" => J_slme, "t_slme" => t_slme,
-              "eq_slme" => eq_slme, "ineq_slme" => in_slme, "W_slme" => W_slme))
+              "eq_slme" => eq_slme, "ineq_slme" => in_slme, "W_slme" => W_slme, "it_slme" => it_slme))
 println("wrote ", joinpath(out_dir, "julia_baselines.json"))

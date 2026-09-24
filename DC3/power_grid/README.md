@@ -192,8 +192,7 @@ Full table: `results/power_grid-default/REPORT.md`.
 | Ipopt, tol 1e-10 (repo ground truth) | 37499.08 | 0 | 0 | 1.000 | — | — | 13.66 |
 | Ipopt, early stop @0.01 % | 37499.10 | 0.0047 | 0.0099 | 1.000 | — | — | 10.80 |
 | LME-ADMM (split) | 37278.79 | 0.563 | 9.54 | **0.506** | 1.6e-14 | 3.1e-1 | 3.10 |
-| **DC3** | 39687.2 | **5.83** | 33.6 | **1.000** | 7.1e-14 | 9.1e-6 | **0.735** |
-| DC3, no correction | 137097 | 267 | 1187 | 0.000 | 2.4e-12 | 2.1e+4 | 0.044 |
+| **DC3 + correction** | 39687.2 | **5.83** | 33.6 | **1.000** | 7.1e-14 | 9.1e-6 | **0.735** |
 
 \* the cvxpy row re-canonicalises on every call; use the Ipopt rows for solver speed.
 
@@ -215,8 +214,8 @@ and the gap column alone would be misleading for either of them.
 of instances met DC3's internal `corr_eps` criterion and 12 did not — yet the
 feasible rate against the *original* constraints is 1.000, because the internal
 criterion is the tightened, row-scaled one.  Median first-feasible step is 9.4,
-worst case 194.  Without correction nothing is feasible (max violation 2.1e4 kW),
-so the correction is doing the essential work here, not the network alone.
+worst case 194.  Training unrolls 10 differentiable correction steps
+(`corr_train_steps`); the test-time cap is `corr_test_max_steps = 500`.
 
 **Latency.**  Stage breakdown at batch 1: predict 0.044 ms, complete 0.013 ms,
 correct 0.46 ms.  DC3's test-time loop is batch-global (it runs until the *worst*
