@@ -36,15 +36,20 @@ def _get(d, *keys, default=None):
 
 
 def collect_rows(bench: dict, julia: dict | None) -> list[dict]:
+    if bench.get("schema_version", 0) < 2:
+        raise ValueError("Legacy benchmark: rerun benchmark with domain-valid metrics and matched timing before reporting")
+    if julia is not None and julia.get("schema_version", 0) < 2:
+        raise ValueError("Legacy Julia baselines: rerun the Julia driver before reporting")
     rows = []
     ref = bench.get("reference")
     if ref:
         rows.append({
             "method": f"{ref['solver']}(cvxpy)",
             "obj_mean": _get(ref, "feasibility", "obj_mean"),
-            "gap_mean": 0.0,
-            "gap_max": 0.0,
+            "gap_mean": _get(ref, "feasibility", "gap_pct_mean"),
+            "gap_max": _get(ref, "feasibility", "gap_pct_max"),
             "feas_rate": _get(ref, "feasibility", "feasible_rate"),
+            "domain_rate": _get(ref, "feasibility", "domain_valid_rate"),
             "eq_max": _get(ref, "feasibility", "eq_max_max"),
             "ineq_max": _get(ref, "feasibility", "ineq_max_max"),
             "lat_median_ms": _get(ref, "latency_ms", "median_ms"),
@@ -59,6 +64,7 @@ def collect_rows(bench: dict, julia: dict | None) -> list[dict]:
             "gap_max": a.get("gap_pct_max"),
             "gap_mean_feasible": a.get("gap_pct_feasible_mean"),
             "feas_rate": a.get("feasible_rate"),
+            "domain_rate": a.get("domain_valid_rate"),
             "eq_max": a.get("eq_max_max"),
             "ineq_max": a.get("ineq_max_max"),
             "domain_max": a.get("domain_max_max"),
@@ -69,10 +75,12 @@ def collect_rows(bench: dict, julia: dict | None) -> list[dict]:
     if julia:
         for name, r in julia.get("methods", {}).items():
             rows.append({
-                "method": name,
+                "method": name + (" [oracle]" if r.get("oracle_assisted") else ""),
                 "obj_mean": r.get("obj_mean"),
                 "gap_mean": r.get("gap_pct_mean"),
                 "gap_max": r.get("gap_pct_max"),
+                "gap_mean_feasible": r.get("gap_pct_feasible_mean"),
+                "domain_rate": r.get("domain_valid_rate"),
                 "feas_rate": r.get("feasible_rate"),
                 "eq_max": r.get("eq_max"),
                 "ineq_max": r.get("ineq_max"),
@@ -89,6 +97,7 @@ COLUMNS = [
     ("gap_max", "gap% max", ".4g"),
     ("gap_mean_feasible", "gap% mean(feas)", ".4g"),
     ("feas_rate", "feas rate", ".3f"),
+    ("domain_rate", "domain valid", ".3f"),
     ("eq_max", "max |h|", ".2e"),
     ("ineq_max", "max viol", ".2e"),
     ("lat_median_ms", "latency ms", ".4g"),
@@ -112,7 +121,7 @@ def write_report(app: str, tag: str = "") -> str:
         "",
         f"* instances: {bench['dc3']['corrected']['n_instances']} test instances "
         f"(`{os.path.basename(bench['instances_file'])}`)",
-        f"* feasibility threshold: max |h| , max relu(g) and max domain violation all <= "
+        f"* feasibility: exact objective-domain membership and max |h|, max relu(g) <= "
         f"{bench['feas_tol']:g}",
         f"* device `{env['device']}`, dtype `{env['dtype']}`, {env['processor']}, "
         f"torch {env['torch']} ({env['torch_num_threads']} threads)",
@@ -121,6 +130,11 @@ def write_report(app: str, tag: str = "") -> str:
         f"error amplification ||A_D⁻¹A_P||₂ = {bench['partition'].get('completion_gain', float('nan')):.3e}",
         f"* network parameters: {bench['n_net_params']:,}; training time "
         f"{bench['train_time_s']:.1f} s (excluded from the latency column)",
+        "",
+        "Quality and headline latency come from the same batch=1 calls on every test instance.",
+        "Oracle-labeled rows use the known reference optimum for stopping; their reference-solve cost is excluded.",
+        "Undefined objective-domain values are never clamped for reporting. All-instance means/gaps are",
+        "undefined if any sample has an invalid objective; feasible-subset gaps are reported separately.",
         "",
         "## Objective, optimality gap and feasibility",
         "",
@@ -140,8 +154,8 @@ def write_report(app: str, tag: str = "") -> str:
         "",
         "## Correction",
         "",
-        f"* correction steps used for the whole test batch: {corr['batch_steps_used']} "
-        f"(cap {corr['max_steps_allowed']})",
+        f"* correction steps per timed single-instance solve: mean {corr['steps_mean']:.2f}, "
+        f"max {corr['steps_max']} (cap {corr['max_steps_allowed']})",
         f"* instances within `corr_eps` at the end: {100*corr['converged_rate']:.1f}% "
         f"(**{corr['correction_failures']} correction failures**)",
         f"* first step at which an instance became feasible: mean "
@@ -150,8 +164,8 @@ def write_report(app: str, tag: str = "") -> str:
         "`correction failures` counts instances that did not reach `corr_eps` on DC3's",
         "*internal* criterion (margin-tightened and, for the eco-MPC, row-scaled).",
         "`feas rate` in the table above is measured on the **original** constraints, so",
-        "the two numbers differ: an instance can fail the stricter internal test and still",
-        "be feasible for the problem as stated.  A finite step budget is never assumed to",
+        "the two numbers can differ. Internal convergence does not certify objective-domain",
+        "membership; domain validity is checked separately. A finite step budget never implies",
         "imply feasibility - both numbers are reported.",
         "",
         "## Latency (warm-up + device synchronisation, timing excludes host->device transfer)",

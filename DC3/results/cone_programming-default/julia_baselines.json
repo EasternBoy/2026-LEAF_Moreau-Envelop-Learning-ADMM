@@ -1,42 +1,59 @@
 {
     "methods": {
-        "sLME-ADMM": {
-            "ineq_max": 5.5001353915784534e-8,
-            "iterations_min": 59,
-            "gap_pct_mean": 0.003176422401076391,
-            "note": "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM, stopped when sLME_ADMM_callback (gap < max_opt_gap) AND ADMM residual < 1e-3",
-            "gap_pct_max": 0.01668393969958463,
+        "Ipopt(deployment)": {
+            "gap_pct_mean": 6.946203352496945e-8,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 6.946203352496945e-8,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 6.946203352496945e-8,
+            "gap_pct_max": 7.238488839835109e-8,
             "feasible_rate": 1,
-            "iterations_max": 104,
-            "eq_max": 3.1086244689504383e-15,
-            "obj_mean": -6.335509444595395,
-            "iterations_mean": 91.36,
-            "latency_median_ms": 40.225187500000004,
+            "domain_valid_rate": 1,
+            "eq_max": 1.7763568394002505e-15,
+            "obj_mean": -6.335710418302256,
+            "latency_median_ms": 99.84493255615234,
+            "oracle_assisted": false,
+            "ineq_max": 0
+        },
+        "sLME-ADMM": {
             "iterations_at_cap": 0,
-            "iterations_median": 91.5
+            "gap_pct_mean": 0.0030714109095325765,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 0.0030714109095325765,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 0.0030714109095325765,
+            "gap_pct_max": 0.02186132767896559,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 3.1086244689504383e-15,
+            "obj_mean": -6.335516013294158,
+            "latency_median_ms": 26.756562,
+            "iterations_mean": 58.03,
+            "oracle_assisted": false,
+            "ineq_max": 1.705630255310897e-6,
+            "iterations_median": 58
         },
         "LME-ADMM": {
-            "note": "not_run: needs Gurobi for aux_solver_gen"
-        },
-        "Ipopt(early-stop)": {
-            "gap_pct_mean": 0.04883911027286551,
-            "note": "Ipopt stopped by Ipopt_callback_BM at 0.1% relative gap and inf_pr < 1e-4*scale",
-            "obj_mean": -6.332617828295149,
-            "latency_median_ms": 51.546454429626465,
-            "gap_pct_max": 0.0995779298310919,
-            "feasible_rate": 1,
-            "ineq_max": 9.386358755048008e-5
+            "note": "not_run: needs Gurobi"
         },
         "Ipopt(tol=1e-8)": {
-            "gap_pct_mean": 0,
-            "note": "ground-truth reference of examples/cone_programming/benchmarkOG.jl",
+            "gap_pct_mean": 9.876393081402669e-14,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 9.876393081402669e-14,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 9.876393081402669e-14,
+            "gap_pct_max": 2.9799874423989855e-13,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 1.9984014443252818e-15,
             "obj_mean": -6.335710422703056,
-            "latency_median_ms": 97.22697734832764,
-            "gap_pct_max": 0,
-            "feasible_rate": 1
+            "latency_median_ms": 100.81052780151367,
+            "oracle_assisted": false,
+            "ineq_max": 4.605982262262387e-12
         }
     },
-    "note": "produced by DC3/julia/baselines_cone.jl on DC3's exported test instances; Gurobi-based baselines (LME_ADMM with aux_solver_gen) were not run - no license.",
-    "max_opt_gap": 0.1,
+    "note": "Measured original-constraint feasibility and exact objective domain. Deployment stopping; no optimum oracle. Gurobi-dependent baselines not run.",
+    "max_opt_gap": null,
+    "schema_version": 2,
     "n_instances": 100
 }

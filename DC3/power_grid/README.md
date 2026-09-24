@@ -179,47 +179,16 @@ python -m DC3.tune --app power_grid \
 | `soft_weight_eq_frac` | defaults to 0: with completion the equality residual is ~10⁻¹⁴, so the equality term of the soft loss carries no signal. |
 | Inconsistency in the Julia code (documented, not changed) | `aux_solver_eco` in `eMPC_ADMM.jl` declares `p[1:N] .>= 1` while `mpc_eco_solver` and `aux_solver_eco_data` use `p .>= 0`. DC3 uses `p ≥ 0`, matching the model that defines `Jopt`. |
 
-## 7. Executed results
+## 7. Results and protocol
 
-Run end to end on this machine (Apple M5 Pro, CPU, float64, torch 2.14.0,
-6 torch threads), `N = 96`, 500 test instances, feasibility threshold 1e-4 on the
-equality residual, the inequality violation *and* the objective-domain violation.
-Full table: `results/power_grid-default/REPORT.md`.
+The former numerical tables have been withdrawn because they used tolerant
+objective-domain checks and mixed whole-batch quality with single-instance
+timing. The power-grid baseline also required residual and state-reset fixes.
+See [the benchmark protocol](../README.md#benchmark-protocol-version-2) and
+regenerated `results/` reports for current measurements. Saved checkpoints can
+be reevaluated without retraining; their original training history is retained.
 
-| method | obj (mean) | gap % mean | gap % max | feasible rate | max \|h\| | max violation | latency (ms) |
-|---|---|---|---|---|---|---|---|
-| Clarabel (reference) | 37499.08 | 0 | 0 | 1.000 | 6.0e-9 | 7.7e-9 | 9.61* |
-| Ipopt, tol 1e-10 (repo ground truth) | 37499.08 | 0 | 0 | 1.000 | — | — | 13.66 |
-| Ipopt, early stop @0.01 % | 37499.10 | 0.0047 | 0.0099 | 1.000 | — | — | 10.80 |
-| LME-ADMM (split) | 37278.79 | 0.563 | 9.54 | **0.506** | 1.6e-14 | 3.1e-1 | 3.10 |
-| **DC3 + correction** | 39687.2 | **5.83** | 33.6 | **1.000** | 7.1e-14 | 9.1e-6 | **0.735** |
-
-\* the cvxpy row re-canonicalises on every call; use the Ipopt rows for solver speed.
-
-**Reference cross-check.** Julia/Ipopt (tol 1e-10) and Python/Clarabel (tol 1e-9)
-agree to `9.0e-9` relative on all 500 instances, and both return `36479.1113` on
-the nominal instance — the value hard-coded as `Jopt = 36479.1` in
-`examples/power_grid/preprocess.jl`.
-
-**Reading the table.**  DC3 is ~4x faster than the learned ADMM baseline and
-~15x faster than Ipopt, and it is feasible on every instance — but its objective
-gap (5.8 % mean, 33.6 % worst case) is an order of magnitude worse than
-LME-ADMM's 0.56 %.  Conversely LME-ADMM is feasible on only 50.6 % of instances:
-its stopping rule (`sLME_ADMM_callback`) is an *optimality-gap* test, so it
-returns points with inequality violations up to 0.31 while DC3's correction
-targets feasibility directly.  The two methods are therefore not interchangeable,
-and the gap column alone would be misleading for either of them.
-
-**Correction.**  500 steps were used for the 500-instance batch (the cap), 97.6 %
-of instances met DC3's internal `corr_eps` criterion and 12 did not — yet the
-feasible rate against the *original* constraints is 1.000, because the internal
-criterion is the tightened, row-scaled one.  Median first-feasible step is 9.4,
-worst case 194.  Training unrolls 10 differentiable correction steps
-(`corr_train_steps`); the test-time cap is `corr_test_max_steps = 500`.
-
-**Latency.**  Stage breakdown at batch 1: predict 0.044 ms, complete 0.013 ms,
-correct 0.46 ms.  DC3's test-time loop is batch-global (it runs until the *worst*
-instance in the batch converges), so `ms/instance` is not monotone in batch size:
-0.56 ms at batch 1, 0.10 ms at batch 32, but 2.6 ms at batch 500.  Training took
-635 s and is excluded from every latency figure; the tuning runs that preceded it
-are additional and are reported in `results/power_grid-tune/tune_results.json`.
+Objective values outside the mathematical domain are undefined, even when a
+small negative coordinate passes the ordinary constraint tolerance. Such points
+are not counted as feasible, and clamped training surrogates are not reported
+as optimization objectives or optimality gaps.

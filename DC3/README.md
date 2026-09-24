@@ -10,7 +10,7 @@ applied to the two applications of this repository:
 | [`cone_programming/`](cone_programming/README.md) | maximum-entropy cone program | `examples/cone_programming` |
 | [`power_grid/`](power_grid/README.md) | economic MPC of a PV + BESS microgrid | `examples/power_grid` |
 
-Nothing outside `DC3/` is modified.  The Julia drivers in `DC3/julia/` `include`
+The Julia drivers in `DC3/julia/` `include`
 the existing example files so that the repository's own solvers
 (Ipopt, sLME-ADMM, LME-ADMM) are benchmarked on **the same instances** as DC3.
 
@@ -18,7 +18,7 @@ Attribution and the upstream license are in
 [`common/NOTICE.md`](common/NOTICE.md) and
 [`common/LICENSE-Apache-2.0-DC3`](common/LICENSE-Apache-2.0-DC3).
 
-## Layoutone_programming-small/REPORT.md
+## Layout
 
 ```
 DC3/
@@ -82,8 +82,8 @@ Every config key can be overridden from the command line:
 1. **Partial-variable prediction** — an MLP (`Linear → BatchNorm → ReLU →
    Dropout`, Kaiming init, as in `method.py::NNSolver`) maps the instance
    parameters to `n_y − n_eq` partial variables.  An optional bounded read-out
-   (DC3's ACOPF `sigmoid` device, generalised to one-sided bounds) keeps the
-   first prediction inside the objective's domain.
+   (DC3's ACOPF `sigmoid` device, generalised to one-sided bounds) bounds the
+   partial prediction; completion can still leave the objective domain.
 2. **Equality completion** — the remaining `n_eq` variables solve
    `A_eq y = b_eq`.  Both problems have affine equalities, so DC3's Newton
    completion collapses to one cached linear solve `y_D = A_D⁻¹(b_eq − A_P y_P)`.
@@ -126,53 +126,31 @@ already resident on the device) and ends after the final completion — i.e. wha
 deployment pays per query.  This matches how the Julia baselines are timed
 (`JuMP.solve_time` / `time_ns` around the solve, with parameters already bound).
 
-## Results obtained on this machine
+## Benchmark protocol (version 2)
 
-Apple M5 Pro, CPU, float64, torch 2.14.0 (6 torch threads), Julia 1.x with Ipopt.
-Feasibility threshold 1e-4 on the equality residual, the inequality violation and
-the objective-domain violation simultaneously.  Reference cross-checks:
-Julia/Ipopt and Python/Clarabel agree to `9e-9` (eco-MPC) and `4.5e-9` (cone,
-n=1000) relative.
+Feasibility requires equality and inequality residuals within the configured
+threshold **and exact objective-domain membership**: `w >= 0` for entropy
+(with `0 log 0 = 0`) and `p > 0` for MPC. Clamped objectives remain training
+surrogates only. Undefined objectives and gaps are reported as missing;
+all-instance aggregates are undefined when any objective is undefined, and
+feasible-subset gaps are reported separately.
 
-| experiment | method | gap % mean | feasible rate | latency ms | training s |
-|---|---|---|---|---|---|
-| eco-MPC, N=96, 500 inst. | Ipopt (early stop) | 0.0047 | 1.000 | 10.80 | — |
-| | LME-ADMM (split) | 0.563 | 0.506 | 3.10 | — |
-| | **DC3 + correction** | 5.83 | **1.000** | **0.735** | 635 |
-| cone, n=100, m=10, 500 inst. | Ipopt (early stop @0.1 %) | 0.043 | 1.000 | 0.86 | — |
-| | sLME-ADMM | 0.00019 | 1.000 | 1.36 | — |
-| | **DC3 + correction** | 0.777 | **1.000** | **0.73** | 610 |
-| cone, n=1000, m=100, 100 inst. | Ipopt (early stop @0.1 %) | 0.049 | 1.000 | 51.6 | — |
-| | sLME-ADMM | 0.0032 | 1.000 | 40.2 | — |
-| | **DC3 + correction** | **75.4** | **0.000** | 138.8 | 480 |
+Headline DC3 quality, per-instance correction counts, and latency now come
+from the same batch=1 solve calls on every test instance after warm-up.
+Additional batched timings are throughput diagnostics only.
 
-Headlines:
+Julia baseline drivers default to **deployment** stopping, without access to
+the reference optimum for termination. To measure time to a known target,
+pass `oracle` as the third argument after the output directory and gap (%).
+Oracle-assisted rows are explicitly labeled; reference-solving cost is excluded.
+All baseline feasibility rates are measured from returned solutions.
 
-* **DC3 buys feasibility with optimality.**  On both problems where it works it
-  has a 100 % feasible rate and the lowest latency, but its objective gap is
-  1–5 orders of magnitude worse than the repository's learned ADMM.  The
-  eco-MPC LME-ADMM stops on an *optimality-gap* test and returns points that
-  violate the inequalities (50.6 % feasible).  For the cone program both
-  baselines now require feasibility as well as the gap: sLME-ADMM stops when
-  the gap (< 0.1 %) *and* the ADMM residual (< 1e-3) are met, Ipopt when the
-  gap *and* its primal infeasibility are small.  Both are feasible on every
-  instance; sLME-ADMM takes 1.36 ms (n=100, median 21 iterations) and 40 ms
-  (n=1000, median 91.5 iterations, none at the cap).  Reporting gap without feasibility, or
-  feasibility without gap, would misrepresent either method.
-* **DC3 is always run with correction.**  Test-time correction runs until every
-  instance in the batch meets `corr_eps = 1e-4` or a step cap is hit (cap 500 for
-  the eco-MPC, 1000 for cone n=100, 2000 for cone n=1000); training unrolls 10
-  differentiable correction steps.  Steps actually used: 500 (eco-MPC, cap),
-  119 (cone n=100, converged), 2000 (cone n=1000, cap, not converged).
-* **DC3 does not scale to the n=1000 cone program** — the completion amplifies
-  prediction error by `‖A_D⁻¹A_P‖₂ = √(n−1) = 31.6`, which is intrinsic to the
-  simplex constraint and independent of the partition.  Details and the
-  correction-learning-rate sweep are in
-  [`cone_programming/README.md`](cone_programming/README.md#7-executed-results).
-* **Gurobi-dependent baselines could not be run** (no license on this machine);
-  they are reported as `not_run` rather than silently substituted.
+The power-grid LME split solver cold-starts every call, checks absolute
+consensus residuals, and requires returned-solution feasibility. A callback
+cannot bypass those conditions. A step cap can still return an infeasible
+point, which is reported as a failure rather than assumed feasible.
 
-Per-experiment tables, plots and machine-readable output live in
-`results/<app>-<tag>/` (`REPORT.md`, `benchmark.json`, `summary.csv`,
-`per_instance.csv`, `dc3_gap_violation.pdf`, `latency_comparison.pdf`,
-`julia_baselines.json`).
+The previous headline tables used the old protocol and have been withdrawn.
+Use regenerated `results/<app>-<tag>/REPORT.md` files. Version-1 JSON results
+are rejected by the report generator; rerun both benchmark and Julia drivers.
+The entropy CP-table scripts similarly require version-2 metric artifacts.

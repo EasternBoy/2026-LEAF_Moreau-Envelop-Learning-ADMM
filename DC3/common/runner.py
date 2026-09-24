@@ -8,6 +8,9 @@ problem, its variable partition, its instance splits and its reference solver;
 from __future__ import annotations
 
 import argparse
+import hashlib
+import inspect
+from pathlib import Path
 import json
 import os
 import time
@@ -106,6 +109,12 @@ def run_training(spec: AppSpec, cfg: dict, tag: str = "", quiet: bool = False) -
     data_time = time.perf_counter() - t0
 
     _fit_input_norm_chunked(solver, problem, spec, train_p, len(train_p))
+    if dc3cfg.output_init_target and dc3cfg.output_weight_scale == 0:
+        probe = spec.index_fn(train_p, torch.arange(min(32, len(train_p)), device=device))
+        solver.eval()
+        with torch.no_grad():
+            if not bool(problem.domain_valid(probe, solver(probe)).all()):
+                raise ValueError("Completed initialization leaves the objective domain; check the partition/target")
     n_params = solver.net.n_params()
     print(f"[{spec.name}] {comp.info.summary()}")
     print(f"[{spec.name}] x_dim={problem.x_dim}  n_y={problem.n_y}  n_eq={problem.n_eq}  "
@@ -132,41 +141,111 @@ def run_training(spec: AppSpec, cfg: dict, tag: str = "", quiet: bool = False) -
 
 
 # ---------------------------------------------------------------------------
+def _reference_fingerprint(spec, cfg, params):
+    """Bind cached optima to exact ordered inputs, formulation, solver and source."""
+    digest = hashlib.sha256()
+    digest.update(json.dumps({"version": 1, "app": spec.name,
+                              "problem": cfg["problem"], "reference": cfg.get("reference", {})},
+                             sort_keys=True).encode())
+    for name, value in sorted(vars(params).items()):
+        digest.update(name.encode())
+        if value is None:
+            digest.update(b"None")
+            continue
+        if torch.is_tensor(value):
+            value = value.detach().cpu().numpy()
+        array = np.ascontiguousarray(value)
+        digest.update(str((array.shape, array.dtype.str)).encode())
+        digest.update(array.tobytes())
+    module = inspect.getmodule(spec.reference_solve)
+    for source in (module, getattr(module, "R", None)):
+        path = getattr(source, "__file__", None)
+        if path and Path(path).is_file():
+            digest.update(Path(path).read_bytes())
+            problem_path = Path(path).with_name("problem.py")
+            if problem_path.is_file():
+                digest.update(problem_path.read_bytes())
+    return digest.hexdigest()
+
+
 def _reference(spec: AppSpec, cfg: dict, test_p, out_dir: str, force: bool) -> dict:
     path = os.path.join(out_dir, "reference.npz")
+    fingerprint = _reference_fingerprint(spec, cfg, test_p)
+    n = len(test_p)
+    n_y = spec.build_problem(cfg["problem"], torch.device("cpu"), torch.float64).n_y
     if os.path.exists(path) and not force:
-        z = np.load(path, allow_pickle=True)
-        return {"Y": z["Y"], "time_s": z["time_s"], "J": z["J"],
-                "status": [str(s) for s in z["status"]]}
-    print(f"[{spec.name}] solving {len(test_p)} test instances with the reference solver ...")
+        try:
+            with np.load(path, allow_pickle=False) as z:
+                if ("fingerprint" in z and str(z["fingerprint"].item()) == fingerprint
+                        and z["Y"].shape == (n, n_y)
+                        and all(z[k].shape == (n,) for k in ("J", "time_s", "status"))):
+                    return {"Y": z["Y"], "time_s": z["time_s"], "J": z["J"],
+                            "status": z["status"].astype(str).tolist()}
+        except (ValueError, KeyError, OSError):
+            pass
+        print(f"[{spec.name}] reference cache is stale or unverifiable; recomputing")
+    print(f"[{spec.name}] solving {n} test instances with the reference solver ...")
     t0 = time.perf_counter()
     Y, times, J, status = spec.reference_solve(test_p, cfg)
     print(f"[{spec.name}] reference solve took {time.perf_counter()-t0:.1f}s "
           f"(median {1e3*np.median(times):.2f} ms/instance)")
-    np.savez_compressed(path, Y=Y, time_s=times, J=J, status=np.array(status, dtype=object))
+    np.savez_compressed(path, Y=Y, time_s=times, J=J, status=np.asarray(status, dtype=str),
+                        fingerprint=fingerprint)
     return {"Y": Y, "time_s": times, "J": J, "status": status}
 
 
-def _dc3_eval(solver: DC3Solver, eval_problem, params, eval_params, J_ref, tol: float) -> dict:
-    """Run DC3 in its native precision, then score in float64 on the CPU.
+def check_checkpoint_config(checkpoint, cfg, spec):
+    """Reject same-shaped but semantically incompatible checkpoints before inference."""
+    saved = checkpoint["config"]
+    if saved["problem"] != cfg["problem"]:
+        raise ValueError("Checkpoint problem differs from evaluation problem; use the checkpoint config or retrain")
+    if saved.get("partition", {}) != cfg.get("partition", {}):
+        raise ValueError("Checkpoint completion partition differs from evaluation partition")
+    old, new = DC3Config.from_dict(saved["dc3"]), DC3Config.from_dict(cfg["dc3"])
+    for key in ("hidden_size", "n_hidden", "batch_norm", "input_norm", "output_transform", "use_compl"):
+        if getattr(old, key) != getattr(new, key):
+            raise ValueError(f"Checkpoint architecture mismatch: {key}")
+    if spec.name == "power_grid":
+        # Pre-fix checkpoints omitted the strategy and used overlapping offset pools.
+        old_data = dict(saved["data"]); new_data = dict(cfg["data"])
+        old_data.setdefault("split_strategy", "legacy_offsets")
+        new_data.setdefault("split_strategy", "temporal")
+        for data in (old_data, new_data):
+            for key in ("n_train", "n_valid", "n_test"):
+                data.pop(key, None)
+            data.setdefault("split_gap", 0)
+        if old_data != new_data:
+            raise ValueError("MPC checkpoint data protocol differs; an overlapping-split checkpoint cannot "
+                             "be relabeled as temporal generalization. Retrain with the new protocol.")
 
-    Scoring in float64 matters when the network runs in float32: the feasibility
-    threshold (1e-4) is close enough to float32 round-off on quantities of size
-    ~1e2 that residuals must not be measured in the working precision.
-    """
-    out = solver.solve(params)
-    Yc = out["Y"].detach().to(device="cpu", dtype=torch.float64)
-    Yr = out["Y_raw"].detach().to(device="cpu", dtype=torch.float64)
-    m_corr = per_instance_metrics(eval_problem, eval_params, Yc, J_ref, tol)
-    m_raw = per_instance_metrics(eval_problem, eval_params, Yr, J_ref, tol)
-    conv = out["converged"].detach().cpu().numpy()
-    first = out["first_feasible_step"].detach().cpu().numpy()
+
+def _dc3_eval(solver, eval_problem, params, eval_params, J_ref, tol,
+              index_fn, device, n_warmup=10) -> dict:
+    """Score the exact batch=1 outputs whose solve calls are timed, on every instance."""
+    first_param = index_fn(params, torch.tensor([0], device=device))
+    for _ in range(n_warmup):
+        solver.solve(first_param)
+    ys, raw, steps, conv, first, times = [], [], [], [], [], []
+    for i in range(len(params)):
+        pb = index_fn(params, torch.tensor([i], device=device))
+        sync(device)
+        start = time.perf_counter()
+        out = solver.solve(pb)
+        sync(device)
+        times.append(time.perf_counter() - start)
+        ys.append(out["Y"].detach().to(device="cpu", dtype=torch.float64))
+        raw.append(out["Y_raw"].detach().to(device="cpu", dtype=torch.float64))
+        steps.append(out["steps"])
+        conv.append(out["converged"].detach().cpu().numpy())
+        first.append(out["first_feasible_step"].detach().cpu().numpy())
+    Yc, Yr = torch.cat(ys), torch.cat(raw)
     return {
-        "corrected": m_corr,
-        "raw": m_raw,
-        "corr_steps_batch": int(out["steps"]),
-        "corr_converged": conv.astype(float),
-        "first_feasible_step": first.astype(float),
+        "corrected": per_instance_metrics(eval_problem, eval_params, Yc, J_ref, tol),
+        "raw": per_instance_metrics(eval_problem, eval_params, Yr, J_ref, tol),
+        "corr_steps": np.asarray(steps),
+        "corr_converged": np.concatenate(conv).astype(float),
+        "first_feasible_step": np.concatenate(first).astype(float),
+        "time_s": np.asarray(times),
         "Y": Yc.numpy(),
     }
 
@@ -174,18 +253,6 @@ def _dc3_eval(solver: DC3Solver, eval_problem, params, eval_params, J_ref, tol: 
 def _latency(spec: AppSpec, solver: DC3Solver, test_p, device, batch_sizes, n_warmup, n_repeat) -> dict:
     res = {}
     n = len(test_p)
-    # single instance (batch = 1): a different instance on every repeat
-    one = [spec.index_fn(test_p, torch.tensor([i % n], device=device)) for i in range(min(n, 64))]
-    counter = {"i": 0}
-
-    def single():
-        p = one[counter["i"] % len(one)]
-        counter["i"] += 1
-        return solver.solve(p)
-
-    res["single_instance"] = summarize(measure(single, device, n_warmup, n_repeat))
-    res["single_instance"]["note"] = "batch=1, one instance per call, cycling through the test set"
-
     for bs in batch_sizes:
         if bs > n:
             continue
@@ -198,7 +265,7 @@ def _latency(spec: AppSpec, solver: DC3Solver, test_p, device, batch_sizes, n_wa
         res[f"batch_{bs}"] = s
 
     # stage breakdown at batch = 1
-    p1 = one[0]
+    p1 = spec.index_fn(test_p, torch.tensor([0], device=device))
     with torch.no_grad():
         res["stage_predict_b1"] = summarize(measure(lambda: solver.predict_partial(p1), device, n_warmup, n_repeat))
         Z1 = solver.predict_partial(p1)
@@ -216,6 +283,7 @@ def run_benchmark(spec: AppSpec, cfg: dict, tag: str = "", checkpoint: Optional[
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"no checkpoint at {ckpt_path}; run the training entry point first")
     ck = torch.load(ckpt_path, map_location=device, weights_only=False)
+    check_checkpoint_config(ck, cfg, spec)
     solver.load_state_dict(ck["state_dict"])
     solver.eval()
     train_time = float(ck.get("history", {}).get("train_time_s", float("nan")))
@@ -231,6 +299,8 @@ def run_benchmark(spec: AppSpec, cfg: dict, tag: str = "", checkpoint: Optional[
 
     tol = dc3cfg.feas_tol
     report: dict[str, Any] = {
+        "schema_version": 2,
+        "evaluation_protocol": "batch=1; quality and latency from the same calls on all test instances",
         "app": spec.name,
         "config": cfg,
         "partition": comp.info.__dict__,
@@ -255,29 +325,35 @@ def run_benchmark(spec: AppSpec, cfg: dict, tag: str = "", checkpoint: Optional[
         report["reference"]["feasibility"] = aggregate(
             per_instance_metrics(eval_problem, eval_params, Yref, J_ref, tol), tol)
 
-    ev = _dc3_eval(solver, eval_problem, test_p, eval_params, J_ref, tol)
+    ev = _dc3_eval(solver, eval_problem, test_p, eval_params, J_ref, tol,
+                   spec.index_fn, device, n_warmup)
     report["dc3"] = {
         "corrected": aggregate(ev["corrected"], tol),
         "raw_no_correction": aggregate(ev["raw"], tol),
         "correction": {
-            "batch_steps_used": ev["corr_steps_batch"],
+            "steps_mean": float(np.mean(ev["corr_steps"])),
+            "steps_max": int(np.max(ev["corr_steps"])),
             "max_steps_allowed": dc3cfg.corr_test_max_steps,
             "converged_rate": float(np.mean(ev["corr_converged"])),
             "correction_failures": int(np.sum(ev["corr_converged"] < 0.5)),
             "first_feasible_step_mean": float(np.mean(ev["first_feasible_step"][ev["first_feasible_step"] >= 0]))
             if np.any(ev["first_feasible_step"] >= 0) else float("nan"),
             "first_feasible_step_max": float(np.max(ev["first_feasible_step"])),
-            "note": "DC3's test-time loop is batch-global: it stops when every instance "
-                    "in the batch is within corr_eps, so batch_steps_used is a batch quantity.",
+            "note": "Per-instance correction statistics from the timed batch=1 solves.",
         },
     }
 
     print(f"[{spec.name}] measuring inference latency ...")
     report["dc3"]["latency"] = _latency(spec, solver, test_p, device, batch_sizes, n_warmup, n_repeat)
 
+    report["dc3"]["latency"]["single_instance"] = summarize(ev["time_s"])
+    report["dc3"]["latency"]["single_instance"]["note"] = report["evaluation_protocol"]
+
     # per-instance dump for downstream plots / tables
     cols = {f"dc3_{k}": v for k, v in ev["corrected"].items() if isinstance(v, np.ndarray)}
     cols["dc3_corr_converged"] = ev["corr_converged"]
+    cols["dc3_corr_steps"] = ev["corr_steps"]
+    cols["dc3_time_ms"] = 1e3 * ev["time_s"]
     if J_ref is not None:
         cols["J_ref"] = J_ref
     save_csv(os.path.join(out_dir, "per_instance.csv"), cols)

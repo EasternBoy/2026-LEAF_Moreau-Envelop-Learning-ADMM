@@ -53,6 +53,6 @@
     "eval_every": 5,
     "feas_tol": 0.0001,
     "lr_decay": 0.995,
-    "output_weight_scale": 0.0
+    "output_weight_scale": 1.0
   }
 }

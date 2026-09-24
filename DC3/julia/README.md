@@ -30,3 +30,22 @@ cone driver additionally clamps `s_mb` to `n` so it also works with one thread.
   reported as `not_run` rather than silently replaced by another solver.
   The Gurobi-free learned baselines - `sLME_ADMM` (cone) and `LME_ADMM_split`
   (power grid) - do run.
+
+## Stopping modes and measured feasibility
+
+The optional arguments are `OUTPUT_DIR GAP_PERCENT MODE`. `MODE` defaults to
+`deployment`; Ipopt uses its own tolerance and learned ADMM uses computable
+residuals. The accurate reference is used only for post-solve scoring.
+
+`oracle` enables a known-optimum target in addition to feasibility/residual
+checks. These results are labeled oracle-assisted and exclude reference-solve
+cost. For example:
+
+```bash
+julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default 0.01 oracle
+```
+
+Use different output directories to retain both modes. Feasibility and exact
+objective-domain membership are measured for every returned solution, including
+Ipopt references. The power driver requests the actual state trajectory from
+JuMP. No feasible rate is hardcoded. Version-1 baseline files must be regenerated.

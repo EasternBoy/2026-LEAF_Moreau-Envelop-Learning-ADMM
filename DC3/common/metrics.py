@@ -10,9 +10,10 @@ Conventions
   can easily undercut the true optimum - ``signed_gap_pct`` is reported next to
   it, and all gap aggregates are additionally computed over the feasible subset
   only.
-* An instance counts as feasible when the max equality residual, the max
-  inequality violation *and* the max objective-domain violation are all within
-  ``tol`` (default 1e-4, DC3's ``corrEps``).
+* Feasibility requires constraint residuals within ``tol`` AND exact objective
+  domain membership. Undefined objectives/gaps are NaN, never clamped values.
+  All-instance means remain undefined if any sample is outside the domain;
+  explicitly named domain-valid and feasible subset statistics are separate.
 """
 
 from __future__ import annotations
@@ -35,7 +36,11 @@ def per_instance_metrics(
     tol: float = 1e-4,
 ) -> dict:
     with torch.no_grad():
-        obj = _np(problem.obj_fn(params, Y, safe=True))
+        surrogate_obj = _np(problem.obj_fn(params, Y, safe=True))
+        domain_valid = _np(problem.domain_valid(params, Y)).astype(bool)
+        obj = _np(problem.obj_fn(params, Y, safe=False))
+        domain_valid &= np.isfinite(obj)
+        obj = np.where(domain_valid, obj, np.nan)
         eq = problem.eq_resid(params, Y).abs()
         eq_max = _np(eq.amax(dim=1)) if eq.shape[1] else np.zeros(Y.shape[0])
         eq_mean = _np(eq.mean(dim=1)) if eq.shape[1] else np.zeros(Y.shape[0])
@@ -46,9 +51,13 @@ def per_instance_metrics(
         dom = problem.domain_resid(params, Y)
         dom_max = _np(dom.amax(dim=1)) if dom.shape[1] else np.zeros(Y.shape[0])
 
-    feasible = (eq_max <= tol) & (ineq_max <= tol) & (dom_max <= tol)
+    constraint_feasible = (eq_max <= tol) & (ineq_max <= tol)
+    feasible = constraint_feasible & domain_valid
     out = {
         "obj": obj,
+        "surrogate_obj": surrogate_obj,
+        "domain_valid": domain_valid.astype(float),
+        "constraint_feasible": constraint_feasible.astype(float),
         "eq_max": eq_max,
         "eq_mean": eq_mean,
         "ineq_max": ineq_max,
@@ -83,7 +92,12 @@ def aggregate(m: dict, tol: float = 1e-4, extra_tols=(1e-6, 1e-4, 1e-3, 1e-2)) -
     n = int(m["obj"].size)
     feas = m["feasible"] > 0.5
     agg = {"n_instances": n, "feas_tol": tol, "feasible_rate": float(feas.mean())}
+    valid = m["domain_valid"] > 0.5
+    agg["domain_valid_rate"] = float(valid.mean())
+    agg["domain_valid_count"] = int(valid.sum())
+    agg["constraint_feasible_rate"] = float(m["constraint_feasible"].mean())
     agg.update(_stats(m["obj"], "obj"))
+    agg.update(_stats(m["obj"][valid], "obj_domain_valid"))
     agg.update(_stats(m["eq_max"], "eq_max"))
     agg.update(_stats(m["ineq_max"], "ineq_max"))
     agg.update(_stats(m["ineq_mean"], "ineq_mean"))
@@ -91,10 +105,11 @@ def aggregate(m: dict, tol: float = 1e-4, extra_tols=(1e-6, 1e-4, 1e-3, 1e-2)) -
     agg["n_ineq_viol_mean"] = float(np.mean(m["n_ineq_viol"]))
     agg["n_ineq_viol_max"] = float(np.max(m["n_ineq_viol"])) if n else float("nan")
     for t in extra_tols:
-        ok = (m["eq_max"] <= t) & (m["ineq_max"] <= t) & (m["domain_max"] <= t)
+        ok = (m["eq_max"] <= t) & (m["ineq_max"] <= t) & valid
         agg[f"feasible_rate@{t:g}"] = float(ok.mean())
     if "gap_pct" in m:
         agg.update(_stats(m["gap_pct"], "gap_pct"))
+        agg.update(_stats(m["gap_pct"][valid], "gap_pct_domain_valid"))
         agg.update(_stats(m["signed_gap_pct"], "signed_gap_pct"))
         agg.update(_stats(m["gap_pct"][feas], "gap_pct_feasible"))
         agg.update(_stats(m["signed_gap_pct"][feas], "signed_gap_pct_feasible"))
@@ -126,4 +141,4 @@ def format_table(rows: list[dict], columns: list[tuple[str, str, str]]) -> str:
              sep.join("-" * w for w in widths)]
     for b in body:
         lines.append(sep.join(c.ljust(w) for c, w in zip(b, widths)))
-    return "\n".join(lines)
+    return "\n".join(line.rstrip() for line in lines)

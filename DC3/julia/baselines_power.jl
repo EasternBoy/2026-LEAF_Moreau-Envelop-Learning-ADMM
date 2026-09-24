@@ -24,7 +24,10 @@ count_ = length(x0s); Nw = size(loads, 2)
 
 const max_opt_gap::FloatType = length(ARGS) >= 2 ? parse(FloatType, ARGS[2]) : 0.01
 const s_mb::Int = 24
-const tol::FloatType = 1e-2
+const oracle_mode = length(ARGS) >= 3 && ARGS[3] == "oracle"
+length(ARGS) < 3 || ARGS[3] in ("oracle", "deployment") || error("mode must be deployment or oracle")
+const tol::FloatType = oracle_mode ? 1e-2 : 1e-6
+include(joinpath(@__DIR__, "metrics.jl"))
 
 GUROBI_ENV = nothing                   # skip Gurobi.Env() (no license here)
 include(joinpath(REPO, "examples", "power_grid", "power_system.jl"))
@@ -39,6 +42,8 @@ J_hi = zeros(count_); t_hi = zeros(count_)
 J_bm = zeros(count_); t_bm = zeros(count_)
 J_sl = zeros(count_); t_sl = zeros(count_)
 eq_sl = zeros(count_); in_sl = zeros(count_); dom_sl = zeros(count_)
+metrics_hi = NamedTuple[]; metrics_bm = NamedTuple[]; metrics_sl = NamedTuple[]
+iterations = zeros(Int, count_)
 
 sol_hi = mpc_eco_solver("Ipopt", mpc_data, 1e-10)
 mgrad   = gradient_struct(model, s_mb, dim)
@@ -55,60 +60,44 @@ for k in 1:count_
     load = Vector{FloatType}(loads[k, :])
     gen  = Vector{FloatType}(gens[k, :])
 
-    _, th, Jh = sol_hi(x0, load, gen)
+    vh, th, Jh = sol_hi(x0, load, gen; return_state=true)
+    push!(metrics_hi, power_metrics(mpc_data, vh, x0, load, gen))
     J_hi[k] = Jh; t_hi[k] = th
     Jopt = Jh                                   # per-instance target for the callbacks
 
-    sol_bm = mpc_eco_solver("Ipopt", mpc_data, tol)   # tol>=1e-3 -> Ipopt_callback_BM
-    _, tb, Jb = sol_bm(x0, load, gen)
+    sol_bm = mpc_eco_solver("Ipopt", mpc_data, tol)   # oracle mode alone enables the callback
+    vb, tb, Jb = sol_bm(x0, load, gen; return_state=true)
+    push!(metrics_bm, power_metrics(mpc_data, vb, x0, load, gen))
     J_bm[k] = Jb; t_bm[k] = tb
 
-    # default tol / max_iter, exactly as examples/power_grid/benchmarkOG.jl calls it
-    v, ts = admm(x0, load, gen, sLME_ADMM_callback)
-    mv = v[1, :]; uv = v[2, :]; pv = v[3, :]; xv = v[4, :]
-    J_sl[k] = sum(mpc_data.cost_func(mv[i], uv[i], max(pv[i], 1e-12)) for i in 1:Nw)
-    t_sl[k] = ts
-    # residuals of the *original* constraints (x reconstructed from u, as in the model)
-    xr = zeros(Nw + 1); xr[1] = x0
-    for i in 1:Nw; xr[i+1] = A_*xr[i] + B_*uv[i]; end
-    eq_sl[k] = max(maximum(abs.(uv .+ mv .+ gen .- load .- pv)),
-                   abs(xr[end] - x0), maximum(abs.(xr[2:end] .- xv)))
-    in_sl[k] = maximum([maximum(uv .- u_max), maximum(u_min .- uv), maximum(-pv),
-                        maximum(xr .- x_max), maximum(x_min .- xr), 0.0])
-    dom_sl[k] = -minimum(pv)
+    # Track iterations; the deployment callback has no access to Jopt.
+    cb = (z, w, alpha, v, beta, i, J) -> begin
+        iterations[k] = i
+        !oracle_mode || (isfinite(J) && 100abs(J - Jh) / abs(Jh) < max_opt_gap)
+    end
+    v, ts = admm(x0, load, gen, cb)
+    met = power_metrics(mpc_data, v, x0, load, gen)
+    push!(metrics_sl, met)
+    J_sl[k] = met.obj; t_sl[k] = ts
+    eq_sl[k] = met.eq; in_sl[k] = met.ineq
+    pv = v[3, :]; dom_sl[k] = -minimum(pv)
     if k % 5 == 0; GC.gc(); end
     @printf("  [%3d/%3d] Jopt=%.4f  Ipopt_bm=%.4f (%.2f ms)  sLME=%.4f (%.2f ms, eq=%.1e, ineq=%.1e, min p=%.3g)\n",
             k, count_, Jh, Jb, 1e3tb, J_sl[k], 1e3ts, eq_sl[k], in_sl[k], minimum(pv))
 end
 
-gap(J, Jr) = 100 .* abs.(J .- Jr) ./ abs.(Jr)
-feas(e, i, d) = mean((e .<= 1e-4) .& (i .<= 1e-4) .& (d .<= 1e-4))
-
 result = Dict(
-  "note" => "produced by DC3/julia/baselines_power.jl on DC3's exported test instances; " *
-            "Gurobi-based baselines (standard ADMM and LME_ADMM with aux_solver_eco) " *
-            "were not run - no license.",
-  "n_instances" => count_,
-  "max_opt_gap" => max_opt_gap,
-  "methods" => Dict(
-    "Ipopt(tol=1e-10)" => Dict(
-        "obj_mean" => mean(J_hi), "gap_pct_mean" => 0.0, "gap_pct_max" => 0.0,
-        "latency_median_ms" => 1e3median(t_hi), "feasible_rate" => 1.0,
-        "note" => "ground-truth reference (examples/power_grid/solutionOG.jl uses tol 1e-20)"),
-    "Ipopt(early-stop)" => Dict(
-        "obj_mean" => mean(J_bm),
-        "gap_pct_mean" => mean(gap(J_bm, J_hi)), "gap_pct_max" => maximum(gap(J_bm, J_hi)),
-        "latency_median_ms" => 1e3median(t_bm), "feasible_rate" => 1.0,
-        "note" => "Ipopt stopped by Ipopt_callback_BM at $(max_opt_gap)% relative gap"),
-    "LME-ADMM(split)" => Dict(
-        "obj_mean" => mean(J_sl),
-        "gap_pct_mean" => mean(gap(J_sl, J_hi)), "gap_pct_max" => maximum(gap(J_sl, J_hi)),
-        "latency_median_ms" => 1e3median(t_sl),
-        "eq_max" => maximum(eq_sl), "ineq_max" => maximum(in_sl),
-        "feasible_rate" => feas(eq_sl, in_sl, dom_sl),
-        "note" => "examples/power_grid/eMPC_L-ADMM.jl :: LME_ADMM_split with dynamics_projection"),
-    "ADMM(Gurobi aux)" => Dict("note" => "not_run: needs Gurobi for aux_solver_eco"),
-  ))
+    "schema_version" => 2,
+    "note" => "Measured original-constraint feasibility and exact objective domain. " *
+              (oracle_mode ? "Oracle-assisted stopping; reference-solve cost excluded." : "Deployment stopping; no optimum oracle.") *
+              " Gurobi-dependent baselines not run.",
+    "n_instances" => count_, "max_opt_gap" => oracle_mode ? max_opt_gap : nothing,
+    "methods" => Dict(
+        "Ipopt(tol=1e-10)" => metric_summary(metrics_hi, t_hi, J_hi),
+        (oracle_mode ? "Ipopt(oracle)" : "Ipopt(deployment)") => metric_summary(metrics_bm, t_bm, J_hi; oracle=oracle_mode),
+        "LME-ADMM(split)" => merge(metric_summary(metrics_sl, t_sl, J_hi; oracle=oracle_mode),
+            Dict("iterations_mean" => mean(iterations), "iterations_at_cap" => sum(iterations .>= 1000))),
+        "ADMM(Gurobi aux)" => Dict("note" => "not_run: needs Gurobi")))
 
 open(joinpath(out_dir, "julia_baselines.json"), "w") do f
     JSON3.pretty(f, result)
@@ -116,5 +105,11 @@ end
 npzwrite(joinpath(out_dir, "julia_baselines.npz"),
          Dict("J_hi" => J_hi, "t_hi" => t_hi, "J_bm" => J_bm, "t_bm" => t_bm,
               "J_sl" => J_sl, "t_sl" => t_sl,
-              "eq_sl" => eq_sl, "ineq_sl" => in_sl, "dom_sl" => dom_sl))
+              "eq_sl" => eq_sl, "ineq_sl" => in_sl, "dom_sl" => dom_sl,
+              "iterations" => iterations,
+              "eq_hi" => [r.eq for r in metrics_hi], "ineq_hi" => [r.ineq for r in metrics_hi],
+              "eq_bm" => [r.eq for r in metrics_bm], "ineq_bm" => [r.ineq for r in metrics_bm],
+              "domain_valid_hi" => [r.valid for r in metrics_hi],
+              "domain_valid_bm" => [r.valid for r in metrics_bm],
+              "domain_valid_sl" => [r.valid for r in metrics_sl]))
 println("wrote ", joinpath(out_dir, "julia_baselines.json"))

@@ -14,10 +14,11 @@ quantities that the JuMP model already exposes as ``MOI.Parameter``:
     (load, gen)  = the length-N window of the CSVs starting at offset s,
                    s ~ Uniform{0, ..., 192 - N}
 
-The offset grid is split *disjointly* between train / validation / test so no
-forecast window is shared across splits, and the **nominal benchmark instance**
-(x0 = 0.5, s = 0) is forced into the test split as instance 0 so that the
-existing reference value ``Jopt = 36479.1`` can be checked directly.
+New experiments split raw time blocks before constructing windows, preserving
+chronological order and optionally leaving a gap. They require aligned CSV
+timestamps and enough data for all three horizons. The bundled positional
+pairing is retained only under explicit ``legacy_offsets`` for historical
+interpolation experiments (including nominal test instance 0).
 
 The ``x0`` range brackets the pool used for the ADMM training data in
 ``data_eMPC_power.jl`` (``train_pool = [1/2, 2/3, 3/4]``, ``test_pool = [3/5]``).
@@ -27,6 +28,7 @@ from __future__ import annotations
 
 import csv
 import os
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -40,22 +42,54 @@ LOAD_CSV = os.path.join(REPO_ROOT, "data", "micro_grid", "load_15min_max100kW_Sa
 SPLIT_ID = {"train": 0, "valid": 1, "test": 2}
 
 
-def read_series() -> tuple[np.ndarray, np.ndarray]:
+def read_series(load_csv=LOAD_CSV, gen_csv=GEN_CSV, require_aligned=False) -> tuple[np.ndarray, np.ndarray]:
     """Second column of each CSV, exactly as ``CSV.read(...)[:, 2]`` in Julia."""
     def col2(path):
         with open(path) as f:
             rows = list(csv.reader(f))
-        return np.array([float(r[1]) for r in rows[1:]], dtype=float)
+        return np.array([float(r[1]) for r in rows[1:]], dtype=float), [r[0] for r in rows[1:]]
 
-    return col2(LOAD_CSV), col2(GEN_CSV)
+    (load, load_times), (gen, gen_times) = col2(load_csv), col2(gen_csv)
+    if require_aligned and load_times != gen_times:
+        raise ValueError("Temporal data requires aligned load/PV timestamps; CSV timestamps differ. "
+                         "Supply longer aligned CSV files. Legacy positional pairing is interpolation only.")
+    if load.size != gen.size or not (np.isfinite(load).all() and np.isfinite(gen).all()):
+        raise ValueError("Load/PV series must have equal lengths, finite values, and aligned timestamps")
+    return load, gen
 
 
 def offset_grid(N: int, n_samples: int) -> np.ndarray:
     return np.arange(0, n_samples - N + 1, dtype=int)
 
 
-def split_offsets(N: int, n_samples: int, seed: int) -> dict[str, np.ndarray]:
-    """Disjoint offset pools: 60 % train, 20 % valid, 20 % test (offset 0 -> test)."""
+def split_offsets(N: int, n_samples: int, seed: int,
+                  strategy: str = "temporal", gap: int = 0) -> dict[str, np.ndarray]:
+    """Split raw time blocks before windowing; no timestamps cross splits.
+
+    Each block reserves N samples; remaining samples are allocated 60/20/20.
+    Optional gaps separate blocks. Legacy offset splitting is interpolation only.
+    """
+    if N <= 0 or gap < 0:
+        raise ValueError("N must be positive and split_gap nonnegative")
+    if strategy == "temporal":
+        required = 3 * N + 2 * gap
+        if n_samples < required:
+            raise ValueError(f"Temporal split needs at least {required} aligned samples for N={N}; "
+                             f"only {n_samples} available. Supply longer load_csv/gen_csv files, "
+                             "or explicitly select a shorter horizon. legacy_offsets is interpolation only.")
+        extra = n_samples - required
+        lengths = [N + int(.6 * extra), N + int(.2 * extra)]
+        lengths.append(n_samples - 2 * gap - sum(lengths))
+        start = 0
+        pools = {}
+        for split, length in zip(SPLIT_ID, lengths):
+            pools[split] = np.arange(start, start + length - N + 1, dtype=int)
+            start += length + gap
+        return pools
+    if strategy != "legacy_offsets":
+        raise ValueError(f"Unknown split strategy: {strategy}")
+    warnings.warn("legacy_offsets shares timestamps across splits: interpolation only, "
+                  "not independent temporal generalization", UserWarning, stacklevel=2)
     offs = offset_grid(N, n_samples)
     rng = np.random.default_rng(int(seed))
     perm = rng.permutation(offs[offs != 0])
@@ -72,11 +106,13 @@ def split_offsets(N: int, n_samples: int, seed: int) -> dict[str, np.ndarray]:
 def generate_numpy(
     N: int, count: int, seed: int, split: str,
     x0_lo: float = 0.25, x0_hi: float = 0.75,
+    split_strategy: str = "temporal", split_gap: int = 0,
+    load_csv: str = LOAD_CSV, gen_csv: str = GEN_CSV,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Return ``(x0, load, gen, offset)`` for `count` instances of `split`."""
-    load_all, gen_all = read_series()
+    load_all, gen_all = read_series(load_csv, gen_csv, require_aligned=split_strategy == "temporal")
     n_samples = min(load_all.size, gen_all.size)
-    pools = split_offsets(N, n_samples, seed)
+    pools = split_offsets(N, n_samples, seed, split_strategy, split_gap)
     pool = pools[split]
     if pool.size == 0:
         raise RuntimeError(f"empty offset pool for split {split!r} (N={N}, samples={n_samples})")
@@ -85,7 +121,7 @@ def generate_numpy(
     rng = np.random.default_rng(ss)
     offs = rng.choice(pool, size=count, replace=True)
     x0 = rng.uniform(x0_lo, x0_hi, size=count)
-    if split == "test":
+    if split == "test" and split_strategy == "legacy_offsets":
         offs[0], x0[0] = 0, 0.5            # nominal `energy_mag()` instance
 
     load = np.stack([load_all[s : s + N] for s in offs])
@@ -102,8 +138,10 @@ def to_params(x0, load, gen, device, dtype) -> GridParams:
 
 
 def make_split(N, count, seed, split, device, dtype, **kw) -> GridParams:
-    x0, load, gen, _ = generate_numpy(N, count, seed, split, **kw)
-    return to_params(x0, load, gen, device, dtype)
+    x0, load, gen, offsets = generate_numpy(N, count, seed, split, **kw)
+    params = to_params(x0, load, gen, device, dtype)
+    params.offsets = torch.as_tensor(offsets, dtype=torch.long, device=device)
+    return params
 
 
 def instances_path(root: str, N: int, count: int, seed: int, split: str = "test") -> str:

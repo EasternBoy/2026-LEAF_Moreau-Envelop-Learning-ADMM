@@ -74,18 +74,21 @@ class GridParams:
     x0: torch.Tensor
     load: torch.Tensor
     gen: torch.Tensor
+    offsets: Optional[torch.Tensor] = None
 
     def __len__(self) -> int:
         return self.x0.shape[0]
 
     def index(self, idx) -> "GridParams":
-        return GridParams(x0=self.x0[idx], load=self.load[idx], gen=self.gen[idx])
+        return GridParams(x0=self.x0[idx], load=self.load[idx], gen=self.gen[idx],
+                          offsets=None if self.offsets is None else self.offsets[idx])
 
     def to(self, device, dtype) -> "GridParams":
         return GridParams(
             x0=self.x0.to(device=device, dtype=dtype),
             load=self.load.to(device=device, dtype=dtype),
             gen=self.gen.to(device=device, dtype=dtype),
+            offsets=None if self.offsets is None else self.offsets.to(device=device),
         )
 
 
@@ -223,6 +226,9 @@ class EcoMPCProblem(ParametricProblem):
     def domain_resid(self, p: GridParams, Y: torch.Tensor) -> torch.Tensor:
         """``a/p`` needs ``p > 0``; returns ``-p`` (positive = outside the domain)."""
         return -Y[:, self.sl_p]
+
+    def domain_valid(self, p: GridParams, Y: torch.Tensor) -> torch.Tensor:
+        return torch.isfinite(Y).all(dim=1) & (Y[:, self.sl_p] > 0).all(dim=1)
 
     # -- closed-form correction gradient ----------------------------------
     def _G_eff(self, completion) -> torch.Tensor:

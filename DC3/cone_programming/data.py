@@ -68,3 +68,24 @@ def save_test_set(path: str, A: np.ndarray, b: np.ndarray, meta: dict) -> None:
 def load_test_set(path: str) -> tuple[np.ndarray, np.ndarray]:
     d = np.load(path)
     return d["A"], d["b"]
+
+
+class StreamingConeParams:
+    """Reproducible training pool materialized one minibatch at a time."""
+    def __init__(self, n, m, count, seed, split, device, dtype):
+        self.n, self.m, self.count, self.seed = n, m, count, seed
+        self.split, self.device, self.dtype = split, device, dtype
+
+    def __len__(self):
+        return self.count
+
+    def index(self, idx):
+        indices = idx.detach().cpu().numpy() if torch.is_tensor(idx) else np.asarray(idx)
+        arrays = []
+        for i in indices.reshape(-1):
+            if i < 0 or i >= self.count:
+                raise IndexError(i)
+            rng = np.random.default_rng(np.random.SeedSequence(self.seed, spawn_key=(SPLIT_ID[self.split], 1, int(i))))
+            arrays.append(rng.uniform(size=(self.m, self.n)))
+        A = np.stack(arrays)
+        return to_params(A, A.sum(axis=2) / (B_DIVISOR * self.n), self.device, self.dtype)

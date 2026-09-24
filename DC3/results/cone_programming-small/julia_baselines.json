@@ -1,42 +1,59 @@
 {
     "methods": {
-        "sLME-ADMM": {
-            "ineq_max": 4.938018001110489e-6,
-            "iterations_min": 19,
-            "gap_pct_mean": 0.00019324248907396591,
-            "note": "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM, stopped when sLME_ADMM_callback (gap < max_opt_gap) AND ADMM residual < 1e-3",
-            "gap_pct_max": 0.0007248813405399952,
+        "Ipopt(deployment)": {
+            "gap_pct_mean": 9.729221270020803e-8,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 9.729221270020803e-8,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 9.729221270020803e-8,
+            "gap_pct_max": 1.7121088759325036e-7,
             "feasible_rate": 1,
-            "iterations_max": 27,
-            "eq_max": 1.2212453270876722e-15,
-            "obj_mean": -4.5510412307263115,
-            "iterations_mean": 21.692,
-            "latency_median_ms": 1.359791,
+            "domain_valid_rate": 1,
+            "eq_max": 8.881784197001252e-16,
+            "obj_mean": -4.551049876741172,
+            "latency_median_ms": 1.394510269165039,
+            "oracle_assisted": false,
+            "ineq_max": 0
+        },
+        "sLME-ADMM": {
             "iterations_at_cap": 0,
-            "iterations_median": 21
+            "gap_pct_mean": 0.0011992434217275854,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 0.0011992434217275854,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 0.0011992434217275854,
+            "gap_pct_max": 0.003999939583408308,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 9.992007221626409e-16,
+            "obj_mean": -4.550998623725286,
+            "latency_median_ms": 0.9876455000000001,
+            "iterations_mean": 13.978,
+            "oracle_assisted": false,
+            "ineq_max": 4.994676587410929e-5,
+            "iterations_median": 15
         },
         "LME-ADMM": {
-            "note": "not_run: needs Gurobi for aux_solver_gen"
-        },
-        "Ipopt(early-stop)": {
-            "gap_pct_mean": 0.04270311713216632,
-            "note": "Ipopt stopped by Ipopt_callback_BM at 0.1% relative gap and inf_pr < 1e-4*scale",
-            "obj_mean": -4.54910605607035,
-            "latency_median_ms": 0.8634328842163086,
-            "gap_pct_max": 0.0933599252779994,
-            "feasible_rate": 1,
-            "ineq_max": 9.992007221626409e-16
+            "note": "not_run: needs Gurobi"
         },
         "Ipopt(tol=1e-8)": {
-            "gap_pct_mean": 0,
-            "note": "ground-truth reference of examples/cone_programming/benchmarkOG.jl",
-            "obj_mean": -4.551049881168977,
-            "latency_median_ms": 1.4491081237792969,
-            "gap_pct_max": 0,
-            "feasible_rate": 1
+            "gap_pct_mean": 3.2160972907680315e-14,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 3.2160972907680315e-14,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 3.2160972907680315e-14,
+            "gap_pct_max": 1.3627608327735838e-13,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 8.881784197001252e-16,
+            "obj_mean": -4.551049881168979,
+            "latency_median_ms": 1.5059709548950195,
+            "oracle_assisted": false,
+            "ineq_max": 4.030620281980646e-11
         }
     },
-    "note": "produced by DC3/julia/baselines_cone.jl on DC3's exported test instances; Gurobi-based baselines (LME_ADMM with aux_solver_gen) were not run - no license.",
-    "max_opt_gap": 0.1,
+    "note": "Measured original-constraint feasibility and exact objective domain. Deployment stopping; no optimum oracle. Gurobi-dependent baselines not run.",
+    "max_opt_gap": null,
+    "schema_version": 2,
     "n_instances": 500
 }

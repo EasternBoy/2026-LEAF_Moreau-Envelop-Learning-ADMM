@@ -1,3 +1,8 @@
+> Protocol update: regenerate CP-table artifacts with both scripts (`--force`).
+> Version-1 results used tolerant domain checks. Feasibility now requires w >= 0;
+> invalid entropy objectives/gaps are undefined. IPOPT and sLME rows are
+> oracle-assisted time-to-target measurements, excluding reference-solving cost.
+
 # Cone-program benchmark data (maximum-entropy problem)
 
 This folder holds the raw per-instance data behind [CP_table.md](CP_table.md),

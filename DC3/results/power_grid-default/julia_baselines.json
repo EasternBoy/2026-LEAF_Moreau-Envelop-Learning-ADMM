@@ -1,36 +1,58 @@
 {
     "methods": {
+        "Ipopt(deployment)": {
+            "gap_pct_mean": 8.289945002025602e-8,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 8.289945002025602e-8,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 8.289945002025602e-8,
+            "gap_pct_max": 8.800635033605069e-8,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 2.1316282072803006e-14,
+            "obj_mean": 37499.07547693739,
+            "latency_median_ms": 13.044595718383789,
+            "oracle_assisted": false,
+            "ineq_max": 9.996997007988284e-9
+        },
         "ADMM(Gurobi aux)": {
-            "note": "not_run: needs Gurobi for aux_solver_eco"
+            "note": "not_run: needs Gurobi"
         },
         "Ipopt(tol=1e-10)": {
-            "gap_pct_mean": 0,
-            "note": "ground-truth reference (examples/power_grid/solutionOG.jl uses tol 1e-20)",
-            "obj_mean": 37499.075445871254,
-            "latency_median_ms": 13.663053512573242,
-            "gap_pct_max": 0,
-            "feasible_rate": 1
-        },
-        "Ipopt(early-stop)": {
-            "gap_pct_mean": 0.004651896348363042,
-            "note": "Ipopt stopped by Ipopt_callback_BM at 0.01% relative gap",
-            "obj_mean": 37499.10142705514,
-            "latency_median_ms": 10.79857349395752,
-            "gap_pct_max": 0.009938284946391304,
-            "feasible_rate": 1
+            "gap_pct_mean": 7.477157097500425e-8,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 7.477157097500425e-8,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 7.477157097500425e-8,
+            "gap_pct_max": 7.703181281594112e-8,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 1.9539925233402755e-14,
+            "obj_mean": 37499.07547389369,
+            "latency_median_ms": 13.539433479309082,
+            "oracle_assisted": false,
+            "ineq_max": 9.999999717180685e-9
         },
         "LME-ADMM(split)": {
-            "gap_pct_mean": 0.5627987031284912,
-            "note": "examples/power_grid/eMPC_L-ADMM.jl :: LME_ADMM_split with dynamics_projection",
-            "eq_max": 1.5987211554602254e-14,
-            "obj_mean": 37278.79173903988,
-            "latency_median_ms": 3.1015872955322266,
-            "gap_pct_max": 9.536168826846946,
-            "feasible_rate": 0.506,
-            "ineq_max": 0.30636633559449905
+            "gap_pct_mean": 0.5632413788246964,
+            "constraint_feasible_rate": 0.468,
+            "gap_pct_domain_valid_mean": 0.5632413788246964,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 0.005641032991325646,
+            "gap_pct_max": 9.536118075198146,
+            "feasible_rate": 0.468,
+            "domain_valid_rate": 1,
+            "eq_max": 1.509903313490213e-14,
+            "obj_mean": 37279.011947877356,
+            "latency_median_ms": 66.5276050567627,
+            "iterations_mean": 570.824,
+            "oracle_assisted": false,
+            "ineq_max": 0.31580421039998247,
+            "iterations_at_cap": 271
         }
     },
-    "note": "produced by DC3/julia/baselines_power.jl on DC3's exported test instances; Gurobi-based baselines (standard ADMM and LME_ADMM with aux_solver_eco) were not run - no license.",
-    "max_opt_gap": 0.01,
+    "note": "Measured original-constraint feasibility and exact objective domain. Deployment stopping; no optimum oracle. Gurobi-dependent baselines not run.",
+    "max_opt_gap": null,
+    "schema_version": 2,
     "n_instances": 500
 }

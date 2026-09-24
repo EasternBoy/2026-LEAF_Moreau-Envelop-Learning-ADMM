@@ -58,7 +58,7 @@ IS_WORKER && include(joinpath(REPO, "examples", "cone_programming", "JuMPsolver.
 IS_WORKER && include(joinpath(REPO, "examples", "cone_programming", "LME-ADMM.jl"))
 IS_WORKER && (ipopt_feas_tol = FEAS_TOL)
 
-entropy(w) = sum(x -> x > 0 ? x * log(x) : 0.0, w)
+entropy(w) = all(isfinite, w) && all(>=(0), w) ? sum(x -> x == 0 ? 0.0 : x * log(x), w) : NaN
 max_violation(A, b, w) = max(maximum(A * w .- b), maximum(-w), abs(sum(w) - 1), 0.0)
 
 function instances()
@@ -109,23 +109,24 @@ end
 
 function run_method(meth, gopt, gname, A, b, Jopt, mgrad)
     path = res_file(meth, gname, n, m)
-    (isfile(path) && !FORCE) && return
+    (isfile(path) && !FORCE && get(npzread(path), "metrics_version", 0) == 2) && return
     global max_opt_gap = gopt
     global J_opt = Jopt[1]
     solve_one(meth, instance(A, b, 1), mgrad)                # compile, not recorded
-    t_ms = zeros(N_SAMPLES); gap = zeros(N_SAMPLES); viol = zeros(N_SAMPLES); iters = zeros(Int, N_SAMPLES)
+    t_ms = zeros(N_SAMPLES); gap = zeros(N_SAMPLES); viol = zeros(N_SAMPLES); iters = zeros(Int, N_SAMPLES); domain_valid = falses(N_SAMPLES)
     for k in 1:N_SAMPLES
         global J_opt = Jopt[k]
         para = instance(A, b, k)
         w, t, iters[k] = solve_one(meth, para, mgrad)
+        domain_valid[k] = all(isfinite, w) && all(>=(0), w)
         t_ms[k] = 1e3t
         gap[k]  = 100abs(entropy(w) - Jopt[k]) / abs(Jopt[k])
         viol[k] = max_violation(para.A, para.b, w)
         k % 5 == 0 && GC.gc()
     end
-    npzwrite(path, Dict("time_ms" => t_ms, "gap_pct" => gap, "max_viol" => viol, "iterations" => iters))
+    npzwrite(path, Dict("time_ms" => t_ms, "gap_pct" => gap, "max_viol" => viol, "iterations" => iters, "domain_valid" => domain_valid, "feasible" => domain_valid .& (viol .<= REPORT_TOL), "metrics_version" => 2, "oracle_assisted" => true))
     @printf("n=%d m=%d %-9s g_opt=%s%%: time %.3f (%.3f) ms, gap %.3g (%.3g) %%, feasible %.3f\n",
-            n, m, meth, gname, mean(t_ms), maximum(t_ms), mean(gap), maximum(gap), mean(viol .<= REPORT_TOL))
+            n, m, meth, gname, mean(t_ms), maximum(t_ms), mean(gap), maximum(gap), mean(domain_valid .& (viol .<= REPORT_TOL)))
 end
 
 function worker()
@@ -143,7 +144,9 @@ end
 function run_missing()
     for (nn, mm) in SIZES
         need = [gt_file(nn, mm); [res_file(me, g, nn, mm) for me in METHODS for (_, g) in GOPTS]]
-        (FORCE || !all(isfile, need)) || continue
+        result_files = need[2:end]
+        current = all(f -> isfile(f) && get(npzread(f), "metrics_version", 0) == 2, result_files)
+        (FORCE || !all(isfile, need) || !current) || continue
         cmd = `$(Base.julia_cmd()) --project=$REPO --threads=auto $(@__FILE__) worker $nn $mm`
         FORCE && (cmd = `$cmd --force`)
         run(cmd)
@@ -151,25 +154,34 @@ function run_missing()
 end
 
 fmt_time(x) = @sprintf("%.2f (%.2f)", mean(x), maximum(x))
-fmt_gap(x)  = @sprintf("%.3g (%.3g)", mean(x), maximum(x))
+fmt_gap(x)  = all(isfinite, x) ? @sprintf("%.3g (%.3g)", mean(x), maximum(x)) : "undefined (outside objective domain)"
 fmt_viol(x) = @sprintf("%.1e (%.1e)", mean(x), maximum(x))
 
 function dc3_cell(nn, mm, gopt)
     isfile(dc3_file(nn, mm)) || return "—", Inf
     d = npzread(dc3_file(nn, mm))
+    get(d, "metrics_version", 0) == 2 || return "rerun required", Inf
     ok = all(d["feasible"] .> 0.5) && maximum(d["gap_pct"]) <= gopt
     return ok ? (fmt_time(d["time_ms"]), mean(d["time_ms"])) : ("unable to achieve", Inf)
 end
 
 function time_cell(meth, gname, nn, mm)
     isfile(res_file(meth, gname, nn, mm)) || return "—", Inf
-    t = npzread(res_file(meth, gname, nn, mm))["time_ms"]
+    d = npzread(res_file(meth, gname, nn, mm))
+    get(d, "metrics_version", 0) == 2 || return "rerun required", Inf
+    (all(d["feasible"] .> 0.5) && all(d["gap_pct"] .<= parse(Float64, gname))) || return "unable to achieve", Inf
+    t = d["time_ms"]
     return fmt_time(t), mean(t)
 end
 
 function iter_suffix(gname, nn, mm)
     isfile(res_file("sLME-ADMM", gname, nn, mm)) || return ""
     return @sprintf(" [%.1f it.]", mean(npzread(res_file("sLME-ADMM", gname, nn, mm))["iterations"]))
+end
+
+function metric_cell(path, key, formatter)
+    d = npzread(path)
+    return get(d, "metrics_version", 0) == 2 ? formatter(d[key]) : "rerun required"
 end
 
 function render()
@@ -183,18 +195,18 @@ function render()
     end
     for (nn, mm) in GAP_ROWS
         ip = isfile(gt_file(nn, mm)) ? "0" : "—"
-        sl = isfile(res_file("sLME-ADMM", "0.1", nn, mm)) ? fmt_gap(npzread(res_file("sLME-ADMM", "0.1", nn, mm))["gap_pct"]) : "—"
+        sl = isfile(res_file("sLME-ADMM", "0.1", nn, mm)) ? metric_cell(res_file("sLME-ADMM", "0.1", nn, mm), "gap_pct", fmt_gap) : "—"
         dc = "—"
         if isfile(dc3_file(nn, mm))
             d = npzread(dc3_file(nn, mm))
-            dc = fmt_gap(d["gap_pct"])
+            dc = get(d, "metrics_version", 0) == 2 ? fmt_gap(d["gap_pct"]) : "rerun required"
             f = mean(d["feasible"] .> 0.5)
             f < 1 && (dc *= @sprintf(", feasible %.0f%%", 100f))
         end
         push!(rows, "| Opt. gap (%) | $nn | $mm | $ip | $sl | $dc |")
     end
     for (_, gname) in GOPTS, (nn, mm) in SIZES
-        cells = [isfile(f) ? fmt_viol(npzread(f)["max_viol"]) : "—"
+        cells = [isfile(f) ? metric_cell(f, "max_viol", fmt_viol) : "—"
                  for f in (res_file("IPOPT", gname, nn, mm), res_file("sLME-ADMM", gname, nn, mm), dc3_file(nn, mm))]
         push!(rows, "| Constr. viol. (g_opt ≤ $(gname)%) | $nn | $mm | $(join(cells, " | ")) |")
     end
@@ -209,6 +221,8 @@ function render()
     iterations; — means the data has not been produced yet.  Constr. viol. is the
     largest violation `max(max(A w − b), max(−w), |1ᵀw − 1|)` of each returned point
     (IPOPT and sLME-ADMM from the run with that g_opt; DC3 has a single run).
+    IPOPT and sLME-ADMM use oracle-assisted stopping against the known optimum;
+    reference-solve cost is excluded. Entropy gaps require w >= 0 exactly.
 
     |  | n | m | IPOPT mean (max) | sLME-ADMM mean (max) | DC3 mean (max) |
     |---|---|---|---|---|---|

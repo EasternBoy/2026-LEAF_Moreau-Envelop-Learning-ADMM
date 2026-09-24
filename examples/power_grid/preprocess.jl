@@ -38,7 +38,7 @@ function Ipopt_callback_BM(
    ls_trials::Cint,
 )
     rel_opt_gap = 100abs(Jopt - obj_value)/Jopt
-    stop = (rel_opt_gap < max_opt_gap)
+    stop = (rel_opt_gap < max_opt_gap) && inf_pr < 1e-4
 
     return !stop #False means running, True means stopping
 end

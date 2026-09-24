@@ -23,6 +23,9 @@ Ainst = inst["A"]                      # (count, m, n)
 binst = inst["b"]                      # (count, m)
 count_, m_, n_ = size(Ainst)
 
+const oracle_mode = length(ARGS) >= 3 && ARGS[3] == "oracle"
+length(ARGS) < 3 || ARGS[3] in ("oracle", "deployment") || error("mode must be deployment or oracle")
+include(joinpath(@__DIR__, "metrics.jl"))
 const n::Int = n_
 const m::Int = m_
 const max_opt_gap::FloatType = length(ARGS) >= 2 ? parse(FloatType, ARGS[2]) : 0.1
@@ -48,6 +51,7 @@ J_slme     = zeros(count_);  t_slme     = zeros(count_)
 eq_slme    = zeros(count_);  in_slme    = zeros(count_)
 W_slme     = zeros(count_, n)
 it_slme    = zeros(Int, count_)
+metrics_hi = NamedTuple[]; metrics_bm = NamedTuple[]; metrics_sl = NamedTuple[]
 
 for k in 1:count_
     global J_opt
@@ -56,20 +60,23 @@ for k in 1:count_
     para = data_opt(n, m, A, b, 1.0, x -> x * log(x))
 
     # ground truth (tol 1e-8), exactly as in benchmarkOG.jl
-    _, t_hi, J_opt = JuMP_solver("Ipopt", para, 1e-8)
+    wh, t_hi, J_opt = JuMP_solver("Ipopt", para, 1e-8)
+    push!(metrics_hi, cone_metrics(A, b, wh))
     J_ipopt_hi[k] = J_opt; t_ipopt_hi[k] = t_hi
 
-    # Ipopt with the repo's optimality-gap callback (the benchmark setting)
-    w_bm, t_bm, J_bm = JuMP_solver("Ipopt", para, 1e-2, callback_struct())
+    # Standard tolerance by default; known-optimum stopping only in oracle mode.
+    w_bm, t_bm, J_bm = JuMP_solver("Ipopt", para, oracle_mode ? 1e-2 : 1e-6)
+    push!(metrics_bm, cone_metrics(A, b, w_bm))
     J_ipopt_bm[k] = J_bm; t_ipopt_bm[k] = t_bm
     viol_bm[k] = max(maximum(A * w_bm .- b), maximum(-w_bm), abs(sum(w_bm) - 1), 0.0)
 
     # learned splitting ADMM (Gurobi free)
     it = Ref(0)
-    sol, t_s, J_s = sLME_ADMM(para, mgrad, (args...) -> (it[] = args[6]; sLME_ADMM_callback(args...)))
+    sol, t_s, J_s = sLME_ADMM(para, mgrad, (args...) -> (it[] = args[6]; (!oracle_mode || sLME_ADMM_callback(args...))))
     it_slme[k] = it[]
     w = Vector{FloatType}(sol[1:n])
-    J_slme[k]  = sum(x -> x > 0 ? x * log(x) : 0.0, w)
+    push!(metrics_sl, cone_metrics(A, b, w))
+    J_slme[k] = metrics_sl[end].obj
     t_slme[k]  = t_s
     eq_slme[k] = abs(sum(w) - 1)
     in_slme[k] = max(maximum(A * w .- b), maximum(-w), 0.0)
@@ -79,38 +86,19 @@ for k in 1:count_
             k, count_, J_opt, J_bm, 1e3t_bm, J_slme[k], 1e3t_s, eq_slme[k], in_slme[k])
 end
 
-gap(J, Jr) = 100 .* abs.(J .- Jr) ./ abs.(Jr)
-
 result = Dict(
-  "note" => "produced by DC3/julia/baselines_cone.jl on DC3's exported test instances; " *
-            "Gurobi-based baselines (LME_ADMM with aux_solver_gen) were not run - no license.",
-  "n_instances" => count_,
-  "max_opt_gap" => max_opt_gap,
-  "methods" => Dict(
-    "Ipopt(tol=1e-8)" => Dict(
-        "obj_mean" => mean(J_ipopt_hi), "gap_pct_mean" => 0.0, "gap_pct_max" => 0.0,
-        "latency_median_ms" => 1e3median(t_ipopt_hi), "feasible_rate" => 1.0,
-        "note" => "ground-truth reference of examples/cone_programming/benchmarkOG.jl"),
-    "Ipopt(early-stop)" => Dict(
-        "obj_mean" => mean(J_ipopt_bm),
-        "gap_pct_mean" => mean(gap(J_ipopt_bm, J_ipopt_hi)),
-        "gap_pct_max"  => maximum(gap(J_ipopt_bm, J_ipopt_hi)),
-        "latency_median_ms" => 1e3median(t_ipopt_bm),
-        "ineq_max" => maximum(viol_bm), "feasible_rate" => mean(viol_bm .<= 1e-4),
-        "note" => "Ipopt stopped by Ipopt_callback_BM at $(max_opt_gap)% relative gap and inf_pr < 1e-4*scale"),
-    "sLME-ADMM" => Dict(
-        "obj_mean" => mean(J_slme),
-        "gap_pct_mean" => mean(gap(J_slme, J_ipopt_hi)),
-        "gap_pct_max"  => maximum(gap(J_slme, J_ipopt_hi)),
-        "latency_median_ms" => 1e3median(t_slme),
-        "eq_max" => maximum(eq_slme), "ineq_max" => maximum(in_slme),
-        "feasible_rate" => mean((eq_slme .<= 1e-4) .& (in_slme .<= 1e-4)),
-        "iterations_median" => median(it_slme), "iterations_mean" => mean(it_slme),
-        "iterations_min" => minimum(it_slme), "iterations_max" => maximum(it_slme),
-        "iterations_at_cap" => sum(it_slme .>= 1000),
-        "note" => "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM, stopped when sLME_ADMM_callback (gap < max_opt_gap) AND ADMM residual < 1e-3"),
-    "LME-ADMM" => Dict("note" => "not_run: needs Gurobi for aux_solver_gen"),
-  ))
+    "schema_version" => 2,
+    "note" => "Measured original-constraint feasibility and exact objective domain. " *
+              (oracle_mode ? "Oracle-assisted stopping; reference-solve cost excluded." : "Deployment stopping; no optimum oracle.") *
+              " Gurobi-dependent baselines not run.",
+    "n_instances" => count_, "max_opt_gap" => oracle_mode ? max_opt_gap : nothing,
+    "methods" => Dict(
+        "Ipopt(tol=1e-8)" => metric_summary(metrics_hi, t_ipopt_hi, J_ipopt_hi),
+        (oracle_mode ? "Ipopt(oracle)" : "Ipopt(deployment)") => metric_summary(metrics_bm, t_ipopt_bm, J_ipopt_hi; oracle=oracle_mode),
+        "sLME-ADMM" => merge(metric_summary(metrics_sl, t_slme, J_ipopt_hi; oracle=oracle_mode),
+            Dict("iterations_mean" => mean(it_slme), "iterations_median" => median(it_slme),
+                 "iterations_at_cap" => sum(it_slme .>= 1000))),
+        "LME-ADMM" => Dict("note" => "not_run: needs Gurobi")))
 
 open(joinpath(out_dir, "julia_baselines.json"), "w") do f
     JSON3.pretty(f, result)
@@ -119,5 +107,10 @@ npzwrite(joinpath(out_dir, "julia_baselines.npz"),
          Dict("J_ipopt_hi" => J_ipopt_hi, "t_ipopt_hi" => t_ipopt_hi,
               "J_ipopt_bm" => J_ipopt_bm, "t_ipopt_bm" => t_ipopt_bm, "viol_ipopt_bm" => viol_bm,
               "J_slme" => J_slme, "t_slme" => t_slme,
-              "eq_slme" => eq_slme, "ineq_slme" => in_slme, "W_slme" => W_slme, "it_slme" => it_slme))
+              "eq_slme" => eq_slme, "ineq_slme" => in_slme, "W_slme" => W_slme, "it_slme" => it_slme,
+              "eq_hi" => [r.eq for r in metrics_hi], "ineq_hi" => [r.ineq for r in metrics_hi],
+              "eq_bm" => [r.eq for r in metrics_bm], "ineq_bm" => [r.ineq for r in metrics_bm],
+              "domain_valid_hi" => [r.valid for r in metrics_hi],
+              "domain_valid_bm" => [r.valid for r in metrics_bm],
+              "domain_valid_slme" => [r.valid for r in metrics_sl]))
 println("wrote ", joinpath(out_dir, "julia_baselines.json"))

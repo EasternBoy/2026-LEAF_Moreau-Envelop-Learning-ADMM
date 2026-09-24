@@ -32,6 +32,8 @@ def partition_other_vars(prob: MaxEntropyProblem, pcfg: dict):
 
 
 def build_split(dc: dict, split: str, count: int, device, dtype):
+    if split == "train" and dc.get("stream_train", False):
+        return D.StreamingConeParams(int(dc["n"]), int(dc["m"]), count, int(dc["seed"]), split, device, dtype)
     return D.make_split(int(dc["n"]), int(dc["m"]), count, int(dc["seed"]), split, device, dtype)
 
 
@@ -39,7 +41,7 @@ def reference_solve(params, cfg: dict):
     rc = cfg.get("reference", {})
     A = params.A.detach().cpu().double().numpy()
     b = params.b.detach().cpu().double().numpy()
-    w_floor = 0.0 if rc.get("ignore_w_floor", True) else 1e-8 / (2 * A.shape[2])
+    w_floor = 0.0 if rc.get("ignore_w_floor", False) else build_problem(cfg["problem"], torch.device("cpu"), torch.float64).w_floor
     return R.solve_batch(A, b, w_floor=w_floor,
                          solver=rc.get("solver", "CLARABEL"),
                          tol=float(rc.get("tol", 1e-9)))

@@ -125,7 +125,7 @@ class MaxEntropyProblem(ParametricProblem):
         if safe:
             W = torch.clamp(Y, min=self.log_eps)
             return (Y * torch.log(W)).sum(dim=1)
-        return (Y * torch.log(Y)).sum(dim=1)
+        return torch.special.xlogy(Y, Y).sum(dim=1)  # continuous extension: 0 log 0 = 0
 
     # -- constraints -------------------------------------------------------
     def ineq_resid(self, p: ConeParams, Y: torch.Tensor, margin: bool = False) -> torch.Tensor:

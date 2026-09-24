@@ -1,3 +1,17 @@
+# Check the returned iterate, including the strict domain p > 0.
+function eco_solution_feasible(data, v, init, load, gen, tol)
+    all(isfinite, v) || return false
+    m, u, p, x = eachrow(v)
+    all(>(0), p) || return false
+    previous = vcat(init, x[1:end-1])
+    eq = max(maximum(abs, data.A .* previous .+ data.B .* u .- x),
+             abs(x[end] - init), maximum(abs, u .+ m .+ gen .- load .- p))
+    viol = max(maximum(u .- data.u_max), maximum(data.u_min .- u),
+               maximum(x .- data.x_max), maximum(data.x_min .- x),
+               init - data.x_max, data.x_min - init, 0.0)
+    return eq <= tol && viol <= tol
+end
+
 function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Function)
 
     z      = zeros(FloatType, dim, N)
@@ -48,7 +62,7 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
                     CALL_BACK_STATUS = callback(z, w, α, i, J, total_time)
                 end
 
-                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(buffer) < tol)
+                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(abs, buffer) < tol)
 
                 if TERMINATION_STATUS
                     if verbose  println("Learning ADMM converges at iteration $i with objective value = $J")  end
@@ -93,9 +107,9 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
         return @inbounds function solver(init::FloatType, load_fc::Vector{FloatType}, gen_fc::Vector{FloatType}, callback = nothing; 
             tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false)
 
-            fill!(z, 0.)
-            fill!(v, 0.)
-            fill!(β, 0.)
+            for state in (z, w, v, α, β, buffer1, buffer2)
+                fill!(state, 0.)
+            end
 
             J = 0
             start_time = time()
@@ -132,7 +146,11 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                     CALL_BACK_STATUS = callback(z, w, α, v, β, i, J)
                 end
 
-                TERMINATION_STATUS = CALL_BACK_STATUS || ((maximum(buffer1) < tol) && (maximum(buffer2) < tol))
+                residual = max(maximum(abs, buffer1), maximum(abs, buffer2))
+                feasible = eco_solution_feasible(data, v, init, load_fc, gen_fc, tol)
+                # A callback cannot bypass consensus or returned-solution feasibility.
+                TERMINATION_STATUS = residual < tol && feasible &&
+                                     (callback === nothing || CALL_BACK_STATUS)
 
                 ## ============== Check termination ===========
                 if TERMINATION_STATUS

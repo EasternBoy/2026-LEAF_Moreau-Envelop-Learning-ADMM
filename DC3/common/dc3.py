@@ -73,7 +73,7 @@ class DC3Config:
     input_norm: bool = True
     output_transform: str = "bounded"   # 'bounded' (DC3-ACOPF style) or 'none'
     output_init_target: bool = True
-    output_weight_scale: float = 1.0
+    output_weight_scale: float = 0.0  # exact target at initialization
     lr: float = 1e-3
     lr_decay: float = 1.0            # multiplicative decay per epoch (1.0 = off)
     weight_decay: float = 0.0
@@ -98,6 +98,7 @@ class DC3Config:
     corr_lr: float = 1e-4
     corr_momentum: float = 0.5
     corr_freeze_converged: bool = False   # False = faithful to DC3
+    corr_preconditioner: str = "none"  # or completion_metric (explicit variant)
     corr_grad_mode: str = "closed_form"   # 'closed_form' | 'autograd'
     ineq_row_scale: str = "auto"          # 'auto' (problem hook) or 'none'
 
@@ -143,6 +144,19 @@ class DC3Solver(nn.Module):
         self.problem = problem
         self.completion = completion
         self.cfg = cfg
+        if cfg.corr_mode not in ("partial", "full"):
+            raise ValueError("corr_mode must be partial or full")
+        if cfg.corr_mode == "partial" and not cfg.use_compl:
+            raise ValueError("partial correction requires completion")
+        if cfg.corr_preconditioner not in ("none", "completion_metric"):
+            raise ValueError("Unknown correction preconditioner")
+        if cfg.corr_preconditioner != "none" and cfg.corr_mode != "partial":
+            raise ValueError("completion_metric applies only to partial correction")
+        metric_factor = None
+        if cfg.corr_preconditioner == "completion_metric":
+            M = completion.A_other_inv_A_partial
+            metric_factor = torch.linalg.solve(torch.eye(M.shape[0], device=M.device, dtype=M.dtype) + M @ M.T, M)
+        self.register_buffer("_metric_factor", metric_factor, persistent=False)
         out_dim = completion.n_partial if cfg.use_compl else problem.n_y
         transform = None
         if cfg.output_transform == "bounded" and cfg.use_compl:
@@ -161,6 +175,7 @@ class DC3Solver(nn.Module):
             input_norm=cfg.input_norm,
             transform=transform,
         )
+        self.net.to(device=problem.A_eq.device, dtype=problem.A_eq.dtype)
         scale = problem.ineq_row_scale(completion) if cfg.ineq_row_scale == "auto" else None
         if cfg.ineq_row_scale not in ("auto", "none"):
             raise ValueError(f"unknown ineq_row_scale {cfg.ineq_row_scale!r}")
@@ -209,9 +224,21 @@ class DC3Solver(nn.Module):
         (grad,) = torch.autograd.grad((1 - frac) * ineq + frac * eq, Yg, create_graph=create_graph)
         return grad
 
+    def correction_output(self, params: Any, state: torch.Tensor) -> torch.Tensor:
+        """Convert correction state to a decision vector without re-completing full steps."""
+        return self.complete(params, state) if self.cfg.corr_mode == "partial" else state
+
+    def _precondition(self, grad):
+        if self._metric_factor is None:
+            return grad
+        M = self.completion.A_other_inv_A_partial
+        # Woodbury: (I + M' M)^-1 grad, avoiding a dense n_partial square solve.
+        return grad - (grad @ M.T) @ self._metric_factor
+
     def correct_train(self, params: Any, Z: torch.Tensor) -> torch.Tensor:
         """Fixed number of differentiable correction steps (``grad_steps``)."""
         cfg = self.cfg
+        Z = self.complete(params, Z) if cfg.corr_mode == "full" else Z
         if not cfg.use_train_corr or cfg.corr_train_steps == 0:
             return Z
         if cfg.corr_mode == "partial" and not cfg.use_compl:
@@ -223,7 +250,7 @@ class DC3Solver(nn.Module):
                 d = self._viol_grad_partial(params, Z_new, create_graph=True)
             else:
                 d = self._viol_grad_full(params, Z_new, create_graph=True)
-            new_step = cfg.corr_lr * d + cfg.corr_momentum * old_step
+            new_step = cfg.corr_lr * self._precondition(d) + cfg.corr_momentum * old_step
             Z_new = Z_new - new_step
             old_step = new_step
         return Z_new
@@ -239,10 +266,11 @@ class DC3Solver(nn.Module):
         at which it first met the tolerance (``-1`` if never).
         """
         cfg = self.cfg
+        Z = self.complete(params, Z) if cfg.corr_mode == "full" else Z
         B = Z.shape[0]
         first_feasible = torch.full((B,), -1, dtype=torch.long, device=Z.device)
         if not cfg.use_test_corr or cfg.corr_test_max_steps == 0:
-            conv = self._converged(params, self.complete(params, Z))
+            conv = self._converged(params, self.correction_output(params, Z))
             first_feasible[conv] = 0
             return Z, 0, conv, first_feasible
 
@@ -252,7 +280,7 @@ class DC3Solver(nn.Module):
         Z_new = Z
         old_step = torch.zeros_like(Z)
         i = 0
-        conv = self._converged(params, self.complete(params, Z_new))
+        conv = self._converged(params, self.correction_output(params, Z_new))
         first_feasible[conv & (first_feasible < 0)] = 0
         while (not bool(conv.all())) and i < cfg.corr_test_max_steps:
             with torch.enable_grad():
@@ -260,13 +288,13 @@ class DC3Solver(nn.Module):
                     d = self._viol_grad_partial(params, Z_new, create_graph=False)
                 else:
                     d = self._viol_grad_full(params, Z_new, create_graph=False)
-            new_step = cfg.corr_lr * d + cfg.corr_momentum * old_step
+            new_step = cfg.corr_lr * self._precondition(d) + cfg.corr_momentum * old_step
             if cfg.corr_freeze_converged:
                 new_step = new_step * (~conv).unsqueeze(1).to(new_step.dtype)
             Z_new = Z_new - new_step
             old_step = new_step
             i += 1
-            conv = self._converged(params, self.complete(params, Z_new))
+            conv = self._converged(params, self.correction_output(params, Z_new))
             newly = conv & (first_feasible < 0)
             first_feasible[newly] = i
         return Z_new, i, conv, first_feasible
@@ -286,7 +314,7 @@ class DC3Solver(nn.Module):
             Z = self.predict_partial(params)
         Y_raw = self.complete(params, Z)
         Z_corr, steps, conv, first = self.correct_test(params, Z)
-        Y = self.complete(params, Z_corr)
+        Y = self.correction_output(params, Z_corr)
         return {
             "Y": Y,
             "Y_raw": Y_raw,
@@ -354,7 +382,7 @@ def train_dc3(
             opt.zero_grad(set_to_none=True)
             Z = solver.predict_partial(pb)
             Z = solver.correct_train(pb, Z)
-            Y = solver.complete(pb, Z)
+            Y = solver.correction_output(pb, Z)
             loss = solver.total_loss(pb, Y)
             lm = loss.mean()
             if not torch.isfinite(lm):
@@ -379,7 +407,9 @@ def train_dc3(
                 vloss = float(solver.total_loss(valid_params, Yv).mean().item())
                 vobj = float(solver.problem.obj_fn(valid_params, Yv).mean().item())
                 vineq = solver.problem.ineq_dist(valid_params, Yv).amax(dim=1)
-                vfeas = float((vineq <= cfg.feas_tol).double().mean().item())
+                veq = solver.problem.eq_resid(valid_params, Yv).abs().amax(dim=1)
+                vdomain = solver.problem.domain_valid(valid_params, Yv)
+                vfeas = float(((vineq <= cfg.feas_tol) & (veq <= cfg.feas_tol) & vdomain).double().mean().item())
                 vineq_max = float(vineq.max().item())
             history["epoch"].append(ep)
             history["train_loss"].append(float(np.mean(losses)) if losses else float("nan"))

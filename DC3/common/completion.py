@@ -181,8 +181,8 @@ class LinearCompletion:
         # How strongly an error in the predicted block is amplified into the
         # completed block: ||dy_D/dy_P||_2 = ||A_D^{-1} A_P||_2.  For a simplex
         # equality (1^T y = 1) this is sqrt(n-1) for *every* choice of dependent
-        # variable, i.e. the amplification is a property of the constraint, not
-        # of the partition - see cone_programming/README.md.
+        # variable within this coordinate-elimination parametrization. This does
+        # not imply the same conditioning in other coordinates or failure of DC3.
         with np.errstate(all="ignore"):
             self.info.completion_gain = float(
                 np.linalg.norm(_as_numpy(self.A_other_inv_A_partial), 2))

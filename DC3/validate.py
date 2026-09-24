@@ -97,7 +97,7 @@ def validate_power(N=96, n_inst=4, seed=0, julia_npz: str | None = None):
     print(f"\n=== power_grid (N={N}, {n_inst} instances) ===")
     dev, dt = torch.device("cpu"), torch.float64
     prob = EcoMPCProblem(N=N, dtype=dt, device=dev)
-    params = make_split(N, n_inst, seed, "test", dev, dt)
+    params = make_split(N, n_inst, seed, "test", dev, dt, split_strategy="legacy_offsets")
     comp = LinearCompletion(prob.A_eq, strategy="explicit", other_vars=prob.default_other_vars())
     comp.check(strict=True)
     print("  " + comp.info.summary())

@@ -20,9 +20,10 @@ no notion of an open domain.  We therefore
   set (``margin=True``).  Tightening can only make DC3 more conservative - a
   point feasible for the tightened set is feasible for the original one - so
   reported feasibility rates stay valid;
-* evaluate the objective with the arguments clamped into the domain
-  (``safe=True``) and report the domain violation separately, rather than
-  silently returning ``inf``/``nan``.
+* use clamped objectives (``safe=True``) only as training surrogates;
+* report exact objectives (``safe=False``) only for domain-valid points.
+  Domain validity is independent of constraint tolerance; invalid gaps are NaN.
+  Entropy uses its continuous extension at zero.
 """
 
 from __future__ import annotations
@@ -81,6 +82,10 @@ class ParametricProblem(ABC):
         Positive entries mean the objective was evaluated outside its domain.
         """
         return torch.zeros(Y.shape[0], 0, dtype=Y.dtype, device=Y.device)
+
+    def domain_valid(self, params: Any, Y: torch.Tensor) -> torch.Tensor:
+        """Exact objective-domain membership, independent of feasibility tolerance."""
+        return torch.isfinite(Y).all(dim=1) & (self.domain_resid(params, Y) <= 0).all(dim=1)
 
     # ---- optional fast paths --------------------------------------------
     def ineq_partial_grad(self, params: Any, Z: torch.Tensor, completion,

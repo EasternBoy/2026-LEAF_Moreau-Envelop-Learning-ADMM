@@ -52,7 +52,7 @@ function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct
         cbs.rel_opt_gap = FloatType[]
     end
 
-    function solver(init::FloatType, load::Vector{FloatType}, generator::Vector{FloatType}; verbose = false)
+    function solver(init::FloatType, load::Vector{FloatType}, generator::Vector{FloatType}; verbose = false, return_state = false)
         MOI.set.(model, POI.ParameterValue(), model[:load], load)
         MOI.set.(model, POI.ParameterValue(), model[:generator], generator)
         MOI.set.(model, POI.ParameterValue(), model[:x0], init)
@@ -74,6 +74,9 @@ function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct
         vars = vcat(JuMP.value.(model[:m])',  JuMP.value.(model[:u])', JuMP.value.(model[:p])')
 
 
+        if return_state
+            vars = vcat(vars, permutedims([JuMP.value(model[:x][i]) for i in 1:N]))
+        end
         return vars, solve_time(model), objective_value(model)
     end
 
