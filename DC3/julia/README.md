@@ -9,11 +9,11 @@ instances; `DC3/report.py` picks that file up automatically.
 Run them from the **repository root**:
 
 ```bash
-julia --threads=auto --project=. DC3/julia/baselines_cone.jl  DC3/results/cone_programming
+julia --threads=auto --project=. DC3/julia/baselines_cone.jl  DC3/results/entr_max
 julia --threads=auto --project=. DC3/julia/baselines_power.jl DC3/results/power_grid
 ```
 
-`--threads=auto` matters: `examples/cone_programming/benchmarkOG.jl` sizes its
+`--threads=auto` matters: `examples/entr_max/benchmarkOG.jl` sizes its
 mini-batch as `s_mb = max(div(n, nthreads())+1, 50)`, which exceeds `n` when Julia
 runs single-threaded and makes `utils.jl::mini_batch` index out of bounds.  The
 cone driver additionally clamps `s_mb` to `n` so it also works with one thread.

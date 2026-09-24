@@ -28,5 +28,5 @@ Everything else (the two problem formulations, data generation, reference
 solvers, benchmarking and reporting) is new code written for this repository.
 
 The *problem formulations* themselves are transcriptions of the Julia code in
-`examples/cone_programming` and `examples/power_grid` of this repository, which
+`examples/entr_max` and `examples/power_grid` of this repository, which
 remains the source of truth.

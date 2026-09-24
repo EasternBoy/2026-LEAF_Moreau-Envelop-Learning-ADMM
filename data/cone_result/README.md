@@ -5,27 +5,27 @@
 
 # Cone-program benchmark data (maximum-entropy problem)
 
-This folder holds the raw per-instance data behind [CP_table.md](CP_table.md),
+This folder holds the raw per-instance data behind [entr_max_table.md](entr_max_table.md),
 the solving-time / optimality-gap table for
-`min Σ wᵢ log wᵢ  s.t.  1ᵀw = 1,  A w ≤ b` (`examples/cone_programming`).
+`min Σ wᵢ log wᵢ  s.t.  1ᵀw = 1,  A w ≤ b` (`examples/entr_max`).
 
 ## Reproducing
 
 Run from the repository root:
 
 ```bash
-julia --project=. script/entropy_max/CP_table.jl    # IPOPT and sLME-ADMM columns
-python script/entropy_max/CP_table.py               # DC3 column (DC3/.venv, see DC3/README.md)
+julia --project=. script/entropy_max/entr_max_table.jl    # IPOPT and sLME-ADMM columns
+python script/entropy_max/entr_max_table.py               # DC3 column (DC3/.venv, see DC3/README.md)
 ```
 
 Both scripts read the data in this folder and only compute what is missing.
-Either one rewrites `CP_table.md` from all the data present, so the table is
+Either one rewrites `entr_max_table.md` from all the data present, so the table is
 complete after both have run.  `--force` recomputes a script's data;
-`CP_table.py --retrain` also retrains the DC3 networks.
+`entr_max_table.py --retrain` also retrains the DC3 networks.
 
-`CP_table.jl` handles each (n, m) in a separate Julia process started with
+`entr_max_table.jl` handles each (n, m) in a separate Julia process started with
 `--threads=auto`, because `n` is a `const` in
-`examples/cone_programming/maxEntropy.jl`.
+`examples/entr_max/maxEntropy.jl`.
 
 ## Instances and ground truth
 
@@ -41,7 +41,7 @@ complete after both have run.  `--force` recomputes a script's data;
 
 | method | stops when | solving time |
 |---|---|---|
-| IPOPT | `Ipopt_callback_BM`: the gap of the current iterate is below `g_opt` **and** Ipopt's primal infeasibility `inf_pr < FEAS_TOL·scale` with `FEAS_TOL = 1e-5` (a violation below 1e-5 in `w`; `ipopt_feas_tol` in `preprocess.jl`, default 1e-4, set by `CP_table.jl`); Ipopt `tol` 1e-4 otherwise | `JuMP.solve_time` |
+| IPOPT | `Ipopt_callback_BM`: the gap of the current iterate is below `g_opt` **and** Ipopt's primal infeasibility `inf_pr < FEAS_TOL·scale` with `FEAS_TOL = 1e-5` (a violation below 1e-5 in `w`; `ipopt_feas_tol` in `preprocess.jl`, default 1e-4, set by `entr_max_table.jl`); Ipopt `tol` 1e-4 otherwise | `JuMP.solve_time` |
 | sLME-ADMM | `sLME_ADMM_callback`: gap < `g_opt` **and** ADMM residual `max(‖w−v‖∞, ‖v−z‖∞) < tol = SLME_TOL·scale` with `SLME_TOL = 1e-5` (the residual is in `x = scale·w`, so this bounds it by 1e-5 in `w`: tol = 2e-3 at n = 100, 2e-2 at n = 1000), or 1000 iterations.  The gap is computed on the `n` decision variables only (the iterate is `[x; s]` with `m` slacks; including the slacks biased the gap and left some runs at the cap) | wall time of `sLME_ADMM`, including the LDLᵀ factorisation |
 | DC3 + correction | a single forward pass; correction runs until the violation is ≤ `corr_eps = 1e-4` or the step cap is hit | wall time of `DC3Solver.solve` for one instance (batch = 1): predict + complete + correct |
 
@@ -51,9 +51,9 @@ In every run the first solve is a warm-up and is not recorded.
 the row's `g_opt` on **every** instance (max gap ≤ `g_opt`) **and** is feasible
 on every instance (max violation ≤ 1e-4).  Otherwise it shows *unable to
 achieve*.  DC3 networks: (100, 10) and (1000, 100) reuse
-`DC3/results/cone_programming-small` and `-default`.  (100, 1) and (1000, 10) are
-trained by `CP_table.py`, with the settings of `small.json` (n = 100) or
-`default.json` (n = 1000), into `DC3/results/cone_programming-table-n{n}-m{m}`.
+`DC3/results/entr_max-small` and `-default`.  (100, 1) and (1000, 10) are
+trained by `entr_max_table.py`, with the settings of `small.json` (n = 100) or
+`default.json` (n = 1000), into `DC3/results/entr_max-table-n{n}-m{m}`.
 
 **Opt. gap rows.**  IPOPT is the ground truth, so its gap is 0.  sLME-ADMM
 shows the gap of its `g_opt = 0.1 %` run.  DC3 shows the gap of its only run,
@@ -73,12 +73,12 @@ instance file).  Time is in ms, gap in %.
 
 | file | arrays |
 |---|---|
-| `instances/instances-n={n}-m={m}.npz` | `A` (1000, m, n), `b` (1000, m).  Git-ignored (up to 800 MB); regenerated deterministically by `CP_table.jl` |
+| `instances/instances-n={n}-m={m}.npz` | `A` (1000, m, n), `b` (1000, m).  Git-ignored (up to 800 MB); regenerated deterministically by `entr_max_table.jl` |
 | `ground_truth-n={n}-m={m}.npz` | `J_opt`, `time_ms` (Ipopt, tol 1e-8), `seed` |
 | `IPOPT-gopt={1,0.1}-n={n}-m={m}.npz` | `time_ms`, `gap_pct`, `max_viol`, `iterations` (unused, 0) |
 | `sLME-ADMM-gopt={1,0.1}-n={n}-m={m}.npz` | `time_ms`, `gap_pct`, `max_viol`, `iterations` |
 | `DC3-n={n}-m={m}.npz` | `time_ms`, `gap_pct`, `max_viol`, `feasible`, `corr_steps` |
-| `CP_table.md` | the rendered table |
+| `entr_max_table.md` | the rendered table |
 
 `max_viol = max(max(A w − b), max(−w), |1ᵀw − 1|, 0)`.  For DC3 it is the
 largest of the equality residual, the inequality violation and the

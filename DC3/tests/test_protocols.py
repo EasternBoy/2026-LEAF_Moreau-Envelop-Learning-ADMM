@@ -10,9 +10,9 @@ import torch
 from DC3.common.runner import build, _reference, check_checkpoint_config
 from DC3.common.dc3 import DC3Config, DC3Solver, train_dc3
 from DC3.common.completion import LinearCompletion
-from DC3.cone_programming.problem import MaxEntropyProblem
-from DC3.cone_programming.data import make_split, StreamingConeParams
-from DC3.cone_programming.experiment import SPEC as CONE
+from DC3.entr_max.problem import MaxEntropyProblem
+from DC3.entr_max.data import make_split, StreamingConeParams
+from DC3.entr_max.experiment import SPEC as CONE
 from DC3.power_grid.experiment import SPEC as POWER, reference_solve
 from DC3.power_grid.data import split_offsets, make_split as grid_split
 from DC3.power_grid.problem import EcoMPCProblem, GridParams
@@ -49,7 +49,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertFalse(torch.equal(both.A[0],both.A[1]))
 
     def test_large_initialization_is_uniform_and_preconditioner_is_correct(self):
-        cfg=json.loads(Path('DC3/cone_programming/configs/default.json').read_text())
+        cfg=json.loads(Path('DC3/entr_max/configs/default.json').read_text())
         p,c,s,dc,dev,dt=build(CONE,cfg)
         params=make_split(1000,100,3,0,'test',dev,dt)
         for training in [False,True]:

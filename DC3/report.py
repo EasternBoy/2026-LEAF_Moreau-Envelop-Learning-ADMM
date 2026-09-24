@@ -21,7 +21,7 @@ METHOD_NOTES = {
     "Ipopt": "reference NLP solver used by examples/*/benchmark*.jl",
     "Ipopt(early-stop)": "Ipopt with the repo's optimality-gap callback (benchmark setting)",
     "Clarabel(cvxpy)": "conic reference solver, tol 1e-9",
-    "sLME-ADMM": "examples/cone_programming/LME-ADMM.jl :: sLME_ADMM",
+    "sLME-ADMM": "examples/entr_max/LME-ADMM.jl :: sLME_ADMM",
     "LME-ADMM(split)": "examples/power_grid/eMPC_L-ADMM.jl :: LME_ADMM_split",
     "DC3 + correction": "this implementation (completion + correction)",
 }
@@ -271,7 +271,7 @@ def _plots(app, tag, out_dir, bench, julia):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--app", required=True, choices=["cone_programming", "power_grid"])
+    ap.add_argument("--app", required=True, choices=["entr_max", "power_grid"])
     ap.add_argument("--tag", default="")
     a = ap.parse_args()
     write_report(a.app, a.tag)

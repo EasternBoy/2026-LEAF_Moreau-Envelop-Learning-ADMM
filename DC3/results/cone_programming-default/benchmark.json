@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
   "evaluation_protocol": "batch=1; quality and latency from the same calls on all test instances",
-  "app": "cone_programming",
+  "app": "entr_max",
   "config": {
-    "_comment": "Headline size of examples/cone_programming/benchmarkOG.jl (n=1000, m=100). dc3.corr_lr selected by DC3/tune.py on the VALIDATION split only (results/cone_programming-tune-large/tune_results.json); larger values make the correction diverge to NaN. See README section 7: DC3 does not reach feasibility at this size.",
+    "_comment": "Headline size of examples/entr_max/benchmarkOG.jl (n=1000, m=100). dc3.corr_lr selected by DC3/tune.py on the VALIDATION split only (results/entr_max-tune-large/tune_results.json); larger values make the correction diverge to NaN. See README section 7: DC3 does not reach feasibility at this size.",
     "problem": {
       "n": 1000,
       "m": 100,
@@ -58,7 +58,7 @@
       "feas_tol": 0.0001,
       "lr_decay": 0.997
     },
-    "_config_path": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/cone_programming/configs/default.json"
+    "_config_path": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/entr_max/configs/default.json"
   },
   "partition": {
     "strategy": "explicit",
@@ -1089,7 +1089,7 @@
   "feas_tol": 0.0001,
   "train_time_s": 479.99345412803814,
   "n_net_params": 25949415,
-  "instances_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/results/cone_programming-default/test_instances.npz",
+  "instances_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/results/entr_max-default/test_instances.npz",
   "reference": {
     "solver": "CLARABEL",
     "status_counts": {

@@ -3,13 +3,13 @@
 DC3 (*Deep Constraint Completion and Correction*, [Donti, Rolnick & Kolter,
 ICLR 2021](https://arxiv.org/abs/2104.12225), code
 [locuslab/DC3](https://github.com/locuslab/DC3)) applied to the problem in
-`examples/cone_programming`.
+`examples/entr_max`.
 
 ---
 
 ## 1. The problem (source of truth: the Julia code)
 
-`examples/cone_programming/maxEntropy.jl` and `JuMPsolver.jl` build, with
+`examples/entr_max/maxEntropy.jl` and `JuMPsolver.jl` build, with
 `scale = 2n`:
 
 ```julia
@@ -43,7 +43,7 @@ b = [sum(A[i,:]) / (1.06*n) for i in 1:m]
 never exercised by a benchmark and is not used here.)
 
 Default dimensions `n = 1000`, `m = 100` are those of
-`examples/cone_programming/benchmarkOG.jl`; `configs/small.json` uses
+`examples/entr_max/benchmarkOG.jl`; `configs/small.json` uses
 `n = 100, m = 10`, which is the other size the repository benchmarks
 (`data/solving_data/maxEntropy-n=100m=10-*.npz`).
 
@@ -128,19 +128,19 @@ objective and residuals agree with both.
 python -m DC3.validate --app cone                      # formulation + gradient checks
 
 # small configuration (n=100, m=10)
-python -m DC3.cone_programming.train     --config DC3/cone_programming/configs/small.json --tag small
-python -m DC3.cone_programming.benchmark --config DC3/cone_programming/configs/small.json --tag small
+python -m DC3.entr_max.train     --config DC3/entr_max/configs/small.json --tag small
+python -m DC3.entr_max.benchmark --config DC3/entr_max/configs/small.json --tag small
 
 # headline configuration (n=1000, m=100)
-python -m DC3.cone_programming.train     --tag default
-python -m DC3.cone_programming.benchmark --tag default
+python -m DC3.entr_max.train     --tag default
+python -m DC3.entr_max.benchmark --tag default
 
 # repository baselines on the same test instances (Ipopt + sLME-ADMM)
-julia --project=. DC3/julia/baselines_cone.jl DC3/results/cone_programming-small
-python -m DC3.report --app cone_programming --tag small
+julia --project=. DC3/julia/baselines_cone.jl DC3/results/entr_max-small
+python -m DC3.report --app entr_max --tag small
 
 # hyper-parameter search on the validation split only
-python -m DC3.tune --app cone_programming --config DC3/cone_programming/configs/small.json \
+python -m DC3.tune --app entr_max --config DC3/entr_max/configs/small.json \
     --grid '{"dc3.corr_lr":[3e-3,1e-2],"dc3.lr":[1e-4,3e-4]}' --set dc3.epochs=40
 ```
 

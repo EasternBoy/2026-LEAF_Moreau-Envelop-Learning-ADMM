@@ -1,6 +1,6 @@
 """Training entry point.  Run from the repository root::
 
-    python -m DC3.cone_programming.train [--config ...] [--set key=value ...]
+    python -m DC3.entr_max.train [--config ...] [--set key=value ...]
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from .experiment import SPEC
 
 
 def main():
-    ap = argparse.ArgumentParser(description="train DC3 on cone_programming")
+    ap = argparse.ArgumentParser(description="train DC3 on entr_max")
     add_common_args(ap)
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()

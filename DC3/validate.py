@@ -58,11 +58,11 @@ def rel_err(a, b):
 
 # ---------------------------------------------------------------------------
 def validate_cone(n=60, m=8, n_inst=4, seed=0):
-    from .cone_programming.data import make_split
-    from .cone_programming.problem import MaxEntropyProblem
-    from .cone_programming import reference as ref
+    from .entr_max.data import make_split
+    from .entr_max.problem import MaxEntropyProblem
+    from .entr_max import reference as ref
 
-    print(f"\n=== cone_programming (n={n}, m={m}, {n_inst} instances) ===")
+    print(f"\n=== entr_max (n={n}, m={m}, {n_inst} instances) ===")
     dev, dt = torch.device("cpu"), torch.float64
     prob = MaxEntropyProblem(n=n, m=m, dtype=dt, device=dev)
     params = make_split(n, m, n_inst, seed, "test", dev, dt)

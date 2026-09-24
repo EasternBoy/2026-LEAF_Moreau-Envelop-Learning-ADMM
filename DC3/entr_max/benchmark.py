@@ -1,6 +1,6 @@
 """Benchmark entry point.  Run from the repository root::
 
-    python -m DC3.cone_programming.benchmark [--config ...] [--set key=value ...]
+    python -m DC3.entr_max.benchmark [--config ...] [--set key=value ...]
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from .experiment import SPEC
 
 
 def main():
-    ap = argparse.ArgumentParser(description="benchmark DC3 on cone_programming")
+    ap = argparse.ArgumentParser(description="benchmark DC3 on entr_max")
     add_common_args(ap)
     ap.add_argument("--checkpoint", type=str, default=None)
     ap.add_argument("--force-reference", action="store_true")

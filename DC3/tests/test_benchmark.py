@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from DC3.common.metrics import per_instance_metrics, aggregate
 from DC3.common.runner import _dc3_eval
-from DC3.cone_programming.problem import MaxEntropyProblem, ConeParams
+from DC3.entr_max.problem import MaxEntropyProblem, ConeParams
 from DC3.power_grid.problem import EcoMPCProblem, GridParams
 
 class BenchmarkTests(unittest.TestCase):

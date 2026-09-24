@@ -1,5 +1,5 @@
 {
-  "_comment": "Headline size of examples/cone_programming/benchmarkOG.jl (n=1000, m=100).",
+  "_comment": "Headline size of examples/entr_max/benchmarkOG.jl (n=1000, m=100).",
   "problem": {
     "n": 1000,
     "m": 100,

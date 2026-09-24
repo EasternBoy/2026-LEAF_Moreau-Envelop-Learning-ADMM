@@ -25,7 +25,7 @@ from .common.io_utils import DC3_ROOT, save_json
 from .common.metrics import aggregate, per_instance_metrics
 from .common.runner import _fit_input_norm_chunked, apply_overrides, build, load_config
 
-APPS = {"cone_programming": "DC3.cone_programming.experiment",
+APPS = {"entr_max": "DC3.entr_max.experiment",
         "power_grid": "DC3.power_grid.experiment"}
 
 

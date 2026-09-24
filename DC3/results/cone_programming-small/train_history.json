@@ -1,6 +1,6 @@
 {
   "config": {
-    "_comment": "Smaller size also benchmarked by the repository (data/solving_data/maxEntropy-n=100m=10-*.npz). dc3.corr_lr / lr / soft_weight were selected by DC3/tune.py on the VALIDATION split only (see results/cone_programming-tune-small/tune_results.json).",
+    "_comment": "Smaller size also benchmarked by the repository (data/solving_data/maxEntropy-n=100m=10-*.npz). dc3.corr_lr / lr / soft_weight were selected by DC3/tune.py on the VALIDATION split only (see results/entr_max-tune-small/tune_results.json).",
     "problem": {
       "n": 100,
       "m": 10,
@@ -55,7 +55,7 @@
       "feas_tol": 0.0001,
       "lr_decay": 0.995
     },
-    "_config_path": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/cone_programming/configs/small.json"
+    "_config_path": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/entr_max/configs/small.json"
   },
   "history": {
     "epoch": [

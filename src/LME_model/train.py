@@ -10,7 +10,7 @@ from mICNN import train_icnn, batched_forward, batched_grad_wrt_x, to_serializab
 if __name__ == "__main__": 
     data_train   = np.load(os.path.join("data", "maxEntropy-rho=1.0-test.npz"))
     data_test    = np.load(os.path.join("data","maxEntropy-rho=1.0-train.npz"))
-    path_to_save = os.path.join("examples/cone_programming", "test")
+    path_to_save = os.path.join("examples/entr_max", "test")
 
     Xtr, ytr, gtr = data_train["input"].T, data_train["enve"], data_train["grad"].T
     Xva, yva, gva = data_test["input"].T,  data_test["enve"],  data_test["grad"].T

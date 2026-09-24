@@ -1,4 +1,4 @@
-# DC3 benchmark - cone_programming (default)
+# DC3 benchmark - entr_max (default)
 
 * instances: 100 test instances (`test_instances.npz`)
 * feasibility: exact objective-domain membership and max |h|, max relu(g) <= 0.0001

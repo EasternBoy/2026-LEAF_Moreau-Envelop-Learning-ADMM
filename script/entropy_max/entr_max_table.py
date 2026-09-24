@@ -1,14 +1,14 @@
 """Solving-time / optimality-gap table for the maximum-entropy cone program:
-the DC3 column.  The IPOPT and sLME-ADMM columns are filled by CP_table.jl.
+the DC3 column.  The IPOPT and sLME-ADMM columns are filled by entr_max_table.jl.
 
 Run from the repository root with the DC3 environment (see DC3/README.md)::
 
-    python script/entropy_max/CP_table.py            # use stored data, run what is missing
-    python script/entropy_max/CP_table.py --force    # re-evaluate DC3 on every size
-    python script/entropy_max/CP_table.py --retrain  # also retrain the DC3 networks
+    python script/entropy_max/entr_max_table.py            # use stored data, run what is missing
+    python script/entropy_max/entr_max_table.py --force    # re-evaluate DC3 on every size
+    python script/entropy_max/entr_max_table.py --retrain  # also retrain the DC3 networks
 
 DC3 is evaluated on the same 1000 instances per (n, m) as IPOPT and sLME-ADMM
-(data/cone_result/instances/, written by CP_table.jl, which is called here if
+(data/cone_result/instances/, written by entr_max_table.jl, which is called here if
 they do not exist yet).  The gap is measured against the Ipopt (tol 1e-8)
 ground truth stored in data/cone_result/ground_truth-n=..-m=...npz.
 """
@@ -30,19 +30,20 @@ sys.path.insert(0, REPO)
 from DC3.common.metrics import per_instance_metrics  # noqa: E402
 from DC3.common.runner import apply_overrides, build, load_config, run_training  # noqa: E402
 from DC3.common.timing import sync  # noqa: E402
-from DC3.cone_programming import data as D  # noqa: E402
-from DC3.cone_programming.experiment import CONFIG_DIR, SPEC  # noqa: E402
+from DC3.entr_max import data as D  # noqa: E402
+from DC3.entr_max.experiment import CONFIG_DIR, SPEC  # noqa: E402
 
 OUT = os.path.join(REPO, "data", "cone_result")
 INST_DIR = os.path.join(OUT, "instances")
 SIZES = [(100, 1), (100, 10), (1000, 10), (1000, 100)]
-GAP_ROWS = [(100, 10), (1000, 100)]
+GAP_ROWS = [(100, 1), (100, 10), (1000, 10), (1000, 100)]
 GOPTS = [(1.0, "1"), (0.1, "0.1")]            # g_opt in %, and its spelling in file names
 N_SAMPLES = 1000
 FEAS_TOL = 1e-4
 N_WARMUP = 10
+DC3_VERSION = 3                # bump to invalidate stored DC3-*.npz
 
-# DC3 networks that already exist in DC3/results (see DC3/cone_programming/README.md);
+# DC3 networks that already exist in DC3/results (see DC3/entr_max/README.md);
 # other sizes are trained with the settings of the config for the same n.
 EXISTING_TAGS = {(100, 10): "small", (1000, 100): "default"}
 BASE_CONFIG = {100: "small.json", 1000: "default.json"}
@@ -69,13 +70,13 @@ def ensure_instances(n: int, m: int) -> None:
     if os.path.exists(inst_file(n, m)) and os.path.exists(gt_file(n, m)):
         return
     subprocess.run(["julia", f"--project={REPO}", "--threads=auto",
-                    os.path.join(os.path.dirname(__file__), "CP_table.jl"),
+                    os.path.join(os.path.dirname(__file__), "entr_max_table.jl"),
                     "worker", str(n), str(m), "--instances-only"], check=True, cwd=REPO)
 
 
 def checkpoint(n: int, m: int, retrain: bool) -> dict:
     tag = EXISTING_TAGS.get((n, m), f"table-n{n}-m{m}")
-    path = os.path.join(REPO, "DC3", "results", f"cone_programming-{tag}", "checkpoint.pt")
+    path = os.path.join(REPO, "DC3", "results", f"entr_max-{tag}", "checkpoint.pt")
     if os.path.exists(path) and not retrain:
         ck = torch.load(path, map_location="cpu", weights_only=False)
         p = ck["config"]["problem"]
@@ -83,7 +84,7 @@ def checkpoint(n: int, m: int, retrain: bool) -> dict:
             return ck
     cfg = load_config(SPEC, os.path.join(CONFIG_DIR, BASE_CONFIG[n]))
     cfg = apply_overrides(cfg, [f"problem.n={n}", f"problem.m={m}", f"data.n={n}", f"data.m={m}"])
-    print(f"[CP_table] training DC3 for n={n}, m={m} (tag {tag}) ...")
+    print(f"[entr_max_table] training DC3 for n={n}, m={m} (tag {tag}) ...")
     run_training(SPEC, cfg, tag=tag, quiet=True)
     return torch.load(path, map_location="cpu", weights_only=False)
 
@@ -116,15 +117,23 @@ def evaluate(n: int, m: int, ck: dict) -> None:
 
     cpu64 = torch.device("cpu")
     eval_problem = SPEC.build_problem(cfg["problem"], cpu64, torch.float64)
-    met = per_instance_metrics(eval_problem, D.to_params(A, b, cpu64, torch.float64),
-                               torch.cat(Y), J_opt, FEAS_TOL)
+    Y = torch.cat(Y)
+    met = per_instance_metrics(eval_problem, D.to_params(A, b, cpu64, torch.float64), Y, J_opt, FEAS_TOL)
     viol = np.maximum.reduce([met["eq_max"], met["ineq_max"], met["domain_max"], np.zeros(len(A))])
-    np.savez(dc3_file(n, m), time_ms=t_ms, gap_pct=met["gap_pct"], max_viol=viol,
-             feasible=met["feasible"], domain_valid=met["domain_valid"],
-             metrics_version=2, corr_steps=steps)
-    print(f"[CP_table] n={n} m={m} DC3: time {t_ms.mean():.3f} ({t_ms.max():.3f}) ms, "
-          f"gap {met['gap_pct'].mean():.3g} ({met['gap_pct'].max():.3g}) %, "
-          f"feasible {met['feasible'].mean():.3f}")
+    # DC3's correction stops at max(-w) <= corr_eps, so w may be slightly negative.
+    # Score entropy at max(w, 0) (as entr_max_table.jl does) and count -w in max_viol,
+    # rather than letting a -1e-6 entry turn the gap into NaN.
+    Wp = Y.clamp_min(0.0)
+    obj = torch.special.xlogy(Wp, Wp).sum(dim=1).numpy()
+    gap = 100.0 * np.abs(obj - J_opt) / np.abs(J_opt)
+    gap[~np.isfinite(Y.numpy()).all(axis=1)] = np.nan
+    feasible = (viol <= FEAS_TOL) & np.isfinite(gap)
+    np.savez(dc3_file(n, m), time_ms=t_ms, gap_pct=gap, max_viol=viol,
+             feasible=feasible.astype(float), domain_valid=met["domain_valid"],
+             metrics_version=DC3_VERSION, corr_steps=steps)
+    print(f"[entr_max_table] n={n} m={m} DC3: time {t_ms.mean():.3f} ({t_ms.max():.3f}) ms, "
+          f"gap {np.nanmean(gap):.3g} ({np.nanmax(gap):.3g}) %, "
+          f"feasible {feasible.mean():.3f}")
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +167,7 @@ def dc3_cell(n, m, gopt):
     if not os.path.exists(dc3_file(n, m)):
         return "—", np.inf
     d = np.load(dc3_file(n, m))
-    if d.get("metrics_version", 0) != 2:
+    if d.get("metrics_version", 0) != DC3_VERSION:
         return "rerun required", np.inf
     ok = bool(np.all(d["feasible"] > 0.5)) and float(np.max(d["gap_pct"])) <= gopt
     return (fmt_time(d["time_ms"]), float(np.mean(d["time_ms"]))) if ok else ("unable to achieve", np.inf)
@@ -188,22 +197,22 @@ def render() -> None:
         dc = "—"
         if os.path.exists(dc3_file(n, m)):
             d = np.load(dc3_file(n, m))
-            dc = fmt_gap(d["gap_pct"]) if d.get("metrics_version", 0) == 2 else "rerun required"
+            dc = fmt_gap(d["gap_pct"]) if d.get("metrics_version", 0) == DC3_VERSION else "rerun required"
             feas = float(np.mean(d["feasible"] > 0.5))
             if feas < 1:
                 dc += ", feasible %.0f%%" % (100 * feas)
         rows.append(f"| Opt. gap (%) | {n} | {m} | {ip} | {sl} | {dc} |")
     for _, gname in GOPTS:
         for n, m in SIZES:
-            cells = [(fmt_viol(np.load(f)["max_viol"]) if np.load(f).get("metrics_version", 0) == 2
+            cells = [(fmt_viol(np.load(f)["max_viol"]) if np.load(f).get("metrics_version", 0) >= 2
                       else "rerun required") if os.path.exists(f) else "—"
                      for f in (res_file("IPOPT", gname, n, m), res_file("sLME-ADMM", gname, n, m), dc3_file(n, m))]
             rows.append(f"| Constr. viol. (g_opt ≤ {gname}%) | {n} | {m} | {' | '.join(cells)} |")
     body = "\n".join(rows)
     md = f"""# Maximum-entropy cone program: solving time and optimality gap
 
-Generated by `script/entropy_max/CP_table.jl` (IPOPT, sLME-ADMM) and
-`script/entropy_max/CP_table.py` (DC3) from the data in this folder — see
+Generated by `script/entropy_max/entr_max_table.jl` (IPOPT, sLME-ADMM) and
+`script/entropy_max/entr_max_table.py` (DC3) from the data in this folder — see
 [README.md](README.md) for what each number means.  IPOPT and sLME-ADMM use oracle-assisted stopping against the known optimum;
 reference-solve cost is excluded. DC3 does not use an optimum oracle.
 Feasibility additionally requires exact entropy-domain membership (w >= 0).
@@ -219,7 +228,7 @@ largest violation `max(max(A w − b), max(−w), |1ᵀw − 1|)` of each return
 |---|---|---|---|---|---|
 {body}
 """
-    with open(os.path.join(OUT, "CP_table.md"), "w") as fh:
+    with open(os.path.join(OUT, "entr_max_table.md"), "w") as fh:
         fh.write(md)
     print(md)
 
@@ -232,7 +241,7 @@ def main():
     for n, m in SIZES:
         if os.path.exists(dc3_file(n, m)) and not (a.force or a.retrain):
             with np.load(dc3_file(n, m)) as saved:
-                if saved.get("metrics_version", 0) == 2:
+                if saved.get("metrics_version", 0) == DC3_VERSION:
                     continue
         ensure_instances(n, m)
         evaluate(n, m, checkpoint(n, m, a.retrain))

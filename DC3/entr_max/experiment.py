@@ -57,7 +57,7 @@ def export_instances(params, out_dir: str, cfg: dict) -> str:
 
 
 SPEC = AppSpec(
-    name="cone_programming",
+    name="entr_max",
     build_problem=build_problem,
     partition_other_vars=partition_other_vars,
     build_split=build_split,

@@ -1,7 +1,7 @@
 # Runs the repository's own cone-programming solvers on the instances exported
 # by the Python benchmark, and writes julia_baselines.json next to them.
 #
-#   julia --project=. DC3/julia/baselines_cone.jl DC3/results/cone_programming
+#   julia --project=. DC3/julia/baselines_cone.jl DC3/results/entr_max
 #
 # See DC3/julia/README.md for the Gurobi caveat.
 
@@ -15,7 +15,7 @@ import MathOptInterface       as MOI
 const FloatType = Float64
 const REPO = abspath(joinpath(@__DIR__, "..", ".."))
 
-out_dir = length(ARGS) >= 1 ? ARGS[1] : joinpath(REPO, "DC3", "results", "cone_programming")
+out_dir = length(ARGS) >= 1 ? ARGS[1] : joinpath(REPO, "DC3", "results", "entr_max")
 out_dir = isabspath(out_dir) ? out_dir : joinpath(REPO, out_dir)
 inst    = npzread(joinpath(out_dir, "test_instances.npz"))
 
@@ -30,16 +30,16 @@ const n::Int = n_
 const m::Int = m_
 const max_opt_gap::FloatType = length(ARGS) >= 2 ? parse(FloatType, ARGS[2]) : 0.1
 # benchmarkOG.jl uses `max(div(n, nthreads())+1, 50)`.  That formula exceeds `n`
-# when Julia runs single-threaded (or when n is small), and examples/cone_programming/
+# when Julia runs single-threaded (or when n is small), and examples/entr_max/
 # utils.jl::mini_batch then indexes out of bounds - so it is additionally clamped to n.
 # Start Julia with `--threads=auto` to reproduce the multi-threaded setting.
 const s_mb::Int = min(max(div(n, max(Threads.nthreads(), 1)) + 1, 50), n)
 
 GUROBI_ENV = nothing                   # skip Gurobi.Env() (no license here)
-include(joinpath(REPO, "examples", "cone_programming", "maxEntropy.jl"))
-include(joinpath(REPO, "examples", "cone_programming", "preprocess.jl"))
-include(joinpath(REPO, "examples", "cone_programming", "JuMPsolver.jl"))
-include(joinpath(REPO, "examples", "cone_programming", "LME-ADMM.jl"))
+include(joinpath(REPO, "examples", "entr_max", "maxEntropy.jl"))
+include(joinpath(REPO, "examples", "entr_max", "preprocess.jl"))
+include(joinpath(REPO, "examples", "entr_max", "JuMPsolver.jl"))
+include(joinpath(REPO, "examples", "entr_max", "LME-ADMM.jl"))
 
 @printf("cone baselines: %d instances, n=%d, m=%d, max_opt_gap=%.4g%%\n", count_, n, m, max_opt_gap)
 

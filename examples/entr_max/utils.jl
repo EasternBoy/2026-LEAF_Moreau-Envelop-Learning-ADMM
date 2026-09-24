@@ -35,7 +35,7 @@ struct ICNN
 end
 
 
-rho, mp = load_model("examples/cone_programming/mEntropy-rho=1-16.json")
+rho, mp = load_model("examples/entr_max/mEntropy-rho=1-16.json")
 
 model = ICNN(
     mp.U[1], 

@@ -1,8 +1,8 @@
-"""Maximum-entropy cone program, transcribed from ``examples/cone_programming``.
+"""Maximum-entropy cone program, transcribed from ``examples/entr_max``.
 
 Source of truth
 ---------------
-``examples/cone_programming/maxEntropy.jl`` + ``JuMPsolver.jl`` build, with
+``examples/entr_max/maxEntropy.jl`` + ``JuMPsolver.jl`` build, with
 ``scale = 2n``::
 
     variable  x_i >= 1e-8

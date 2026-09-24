@@ -9,4 +9,4 @@ __pycache__/
 #   * dc3_solutions    -> `python -m DC3.<app>.benchmark`
 results/**/checkpoint.pt
 results/**/dc3_solutions.npz
-results/cone_programming-*/test_instances.npz
+results/entr_max-*/test_instances.npz

@@ -7,7 +7,7 @@ applied to the two applications of this repository:
 
 | folder | problem | source of truth |
 |---|---|---|
-| [`cone_programming/`](cone_programming/README.md) | maximum-entropy cone program | `examples/cone_programming` |
+| [`entr_max/`](entr_max/README.md) | maximum-entropy cone program | `examples/entr_max` |
 | [`power_grid/`](power_grid/README.md) | economic MPC of a PV + BESS microgrid | `examples/power_grid` |
 
 The Julia drivers in `DC3/julia/` `include`
@@ -24,7 +24,7 @@ Attribution and the upstream license are in
 DC3/
   common/            problem API, equality completion, DC3 solver + training,
                      metrics, timing, experiment runner
-  cone_programming/  problem, data, reference solver, train / benchmark, configs
+  entr_max/  problem, data, reference solver, train / benchmark, configs
   power_grid/        idem
   julia/             drivers that run the repository's own baselines on DC3's
                      exported test instances
@@ -68,10 +68,10 @@ julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default
 $PY -m DC3.report --app power_grid --tag default
 
 # cone program (small configuration)
-$PY -m DC3.cone_programming.train     --config DC3/cone_programming/configs/small.json --tag small
-$PY -m DC3.cone_programming.benchmark --config DC3/cone_programming/configs/small.json --tag small
-julia --project=. DC3/julia/baselines_cone.jl DC3/results/cone_programming-small
-$PY -m DC3.report --app cone_programming --tag small
+$PY -m DC3.entr_max.train     --config DC3/entr_max/configs/small.json --tag small
+$PY -m DC3.entr_max.benchmark --config DC3/entr_max/configs/small.json --tag small
+julia --project=. DC3/julia/baselines_cone.jl DC3/results/entr_max-small
+$PY -m DC3.report --app entr_max --tag small
 ```
 
 Every config key can be overridden from the command line:
