@@ -232,4 +232,7 @@ function render()
     println(md)
 end
 
-IS_WORKER ? worker() : (run_missing(); render())
+# entr_max_row.jl includes this file for its helpers; only run when executed directly.
+if abspath(PROGRAM_FILE) == @__FILE__
+    IS_WORKER ? worker() : (run_missing(); render())
+end
