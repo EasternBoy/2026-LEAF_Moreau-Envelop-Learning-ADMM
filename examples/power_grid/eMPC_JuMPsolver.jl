@@ -1,4 +1,7 @@
-function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct} = nothing, init_val::Union{Matrix{FloatType}, Nothing} = nothing)
+function mpc_eco_solver(name, mpc_para, tol,
+                        cbs::Union{Nothing, callback_struct} = nothing,
+                        init_val::Union{Matrix{FloatType}, Nothing} = nothing;
+                        configure = nothing)
     model = pick_solver(name, tol, cbs)
 
     N    = mpc_para.N
@@ -45,6 +48,7 @@ function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct
 
     J = sum(cost_func(m[k], u[k], p[k], model) for k in 1:N)
     @objective(model, Min, J)
+    configure !== nothing && configure(model)
     optimize!(model)
 
     if cbs !== nothing
@@ -53,9 +57,9 @@ function mpc_eco_solver(name, mpc_para, tol, cbs::Union{Nothing, callback_struct
     end
 
     function solver(init::FloatType, load::Vector{FloatType}, generator::Vector{FloatType}; verbose = false, return_state = false)
-        MOI.set.(model, POI.ParameterValue(), model[:load], load)
-        MOI.set.(model, POI.ParameterValue(), model[:generator], generator)
-        MOI.set.(model, POI.ParameterValue(), model[:x0], init)
+        set_parameter_value.(model[:load], load)
+        set_parameter_value.(model[:generator], generator)
+        set_parameter_value(model[:x0], init)
 
         optimize!(model)
 

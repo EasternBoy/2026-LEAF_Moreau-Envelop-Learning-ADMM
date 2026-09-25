@@ -69,7 +69,8 @@ function sLME_ADMM_callback(
     v::Matrix{FloatType},
     β::Matrix{FloatType},
     iter::Int,
-    J::FloatType
+    J::FloatType,
+    total_time::FloatType
 )
     opt_gap = 100abs(J - Jopt)/Jopt + 1e9norm(w .- v, Inf) #Terminate by optimality gap
 
@@ -100,6 +101,7 @@ function sADMM_callback_iter(
     β::Matrix{FloatType},
     iter::Int,
     J::FloatType,
+    total_time::FloatType,
     cbs::callback_struct
 )
     push!(cbs.rel_opt_gap, 100abs(J - Jopt)/Jopt)

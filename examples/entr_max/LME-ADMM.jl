@@ -77,7 +77,7 @@ function LME_ADMM(data::data_opt, gradient::gradient_struct, aux_sol::Function)
 
                 residual = maximum(abs.(buffer))
 
-                TERMINATION_STATUS = CALL_BACK_STATUS || (residual < tol)
+                TERMINATION_STATUS = CALL_BACK_STATUS && (residual < tol)
 
 
                 if TERMINATION_STATUS
