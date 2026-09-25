@@ -25,7 +25,7 @@ X0_LO, X0_HI = 0.25, 0.75
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--N", type=int, default=96, help="Forecast horizon")
+    parser.add_argument("--N", type=int, default=192, help="Forecast horizon")
     parser.add_argument("--samples", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=20262309)
     args = parser.parse_args()

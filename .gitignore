@@ -6,7 +6,7 @@ __pycache__/
 # C extensions
 *.so
 *.png
-*.npz
+# *.npz
 
 # Distribution / packaging
 .Python

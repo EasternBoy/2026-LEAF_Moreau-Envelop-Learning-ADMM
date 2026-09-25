@@ -33,10 +33,10 @@ from ..reference import solve_instance
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-N = 96
+N = 192
 INSTANCE_DIR = REPO_ROOT / "data" / "solving_data" / "power_table_inputs"
 OUTPUT_DIR = Path(__file__).resolve().parent / "results"
-MAX_ITER = 500
+MAX_ITER = 200
 
 
 def find_instances(explicit_path: Path | None) -> Path:

@@ -112,9 +112,11 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
             end
 
             J = 0
-            start_time = time()
+            total_time = 0.
 
             for i in 1:max_iter
+                start_time = time_ns()
+
                 # ==== z-update ====
                 buffer1 .= v .+ β
                 @views z[1:dim, :] .= buffer1[1:dim, :] .- mini_batch(local_gradients, buffer1[1:dim, :])./ρ
@@ -139,11 +141,12 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 α .+= buffer1
                 β .+= buffer2
 
+                total_time += time_ns() - start_time
                 CALL_BACK_STATUS = false
                 J = get_objective(data, v)
 
                 if callback !== nothing
-                    CALL_BACK_STATUS = callback(z, w, α, v, β, i, J)
+                    CALL_BACK_STATUS = callback(z, w, α, v, β, i, J, total_time)
                 end
 
                 residual = max(maximum(abs, buffer1), maximum(abs, buffer2))
@@ -161,7 +164,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 end
             end
 
-            return v, time() - start_time
+            return v, total_time / 1e9
         end
     end
 end
