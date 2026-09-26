@@ -50,12 +50,12 @@ end
     return f
 end
 
-mutable struct gradient_struct{T<:Tuple}
+mutable struct gradient_struct
     lenlay::Int
     m::ICNN
-    s_store::T
-    σ_store::T
-    z_store::T
+    s_store::NTuple
+    σ_store::NTuple 
+    z_store::NTuple
 
     init_grad_x::Matrix{FloatType}
     init_dL_dz::Matrix{FloatType}  
@@ -121,12 +121,7 @@ function (obj::gradient_struct)(x::AbstractMatrix{FloatType})
         mul!(s_next, layer.W, z_prev)
         mmul_add_matrix!(s_next, layer.U, x)
         add_bias!(s_next, layer.b)
-        if i == nL
-            # The final activation value is unused when evaluating only the gradient.
-            activation_sigma_only!(obj.σ_store[i+1], s_next, obj.z_store[i+1])
-        else
-            activation_sigma!(obj.z_store[i+1], obj.σ_store[i+1], s_next)
-        end
+        activation_sigma!(obj.z_store[i+1], obj.σ_store[i+1], s_next)
     end
 
     copyto!(obj.dL_curr,    obj.init_dL_dz)
@@ -155,9 +150,8 @@ end
 precompile(LU_decomp, (SparseMatrixCSC{Float64, Int64},))
 
 
-function dynamics_projection(mpc_data::MPCData_eco; state_scale::Real = 1.0)
-    # Project in coordinates [m, u, p, state_scale*x], returning physical units.
-    isfinite(state_scale) && state_scale > 0 || throw(ArgumentError("state_scale must be finite and positive"))
+function dynamics_projection(mpc_data::MPCData_eco)
+    # An analytic solution for  min ||Qs - q||² s.t. Ms = b 
     # The following is for establishment of constraint Ms = b
     # Order of variables: s = [m, u, p, x]ᵀ  R^{4N)}
 
@@ -178,40 +172,34 @@ function dynamics_projection(mpc_data::MPCData_eco; state_scale::Real = 1.0)
 
     M = hcat(zeros(N+1, N), Mu, zeros(N+1, N), Mx)
     M = vcat(M, hcat(IN, IN, -IN, zeros(N,N)))  
-    scales = vcat(ones(FloatType, 3N), fill(FloatType(state_scale), N))
-    row_scales = vcat(fill(FloatType(state_scale), N+1), ones(FloatType, N))
-    Ms = spdiagm(0 => row_scales) * sparse(M) * spdiagm(0 => 1 ./ scales)
+    Q = hcat(I(3N), zeros(3N,N))
 
-    # y = q - M'*(M*M')^(-1)*(M*q-b), equivalent to the full KKT solve.
-    F = cholesky(Symmetric(Ms * Ms'))
-    query = zeros(FloatType, 4N)
-    residual = zeros(FloatType, 2N+1)
-    result = zeros(FloatType, 4, N)
+    # Build KKT blocks
+    Qs = sparse(Q)
+    Ms = sparse(M)
+
+    K = [2 * (Qs' * Qs)  Ms';
+         Ms              spzeros(2N+1, 2N+1)]
+
+    F = LU_decomp(K)
+
+    RHS = MVector{6N+1}(zeros(FloatType, 6N+1))
 
     let F  = F,
-        scales = scales,
-        Ms = Ms,
-        row_scales = row_scales,
+        Qs = Qs,
         N  = N,
         A  = A
         return @inbounds function proj(qm::Matrix{Float64}, init::FloatType, load_fc::Vector{FloatType}, gen_fc::Vector{FloatType})
-            for r in 1:4, k in 1:N
-                j = (r-1)*N+k
-                query[j] = scales[j] * qm[r,k]
-            end
-            mul!(residual, Ms, query)
-            residual[1] += row_scales[1] * A * init
-            residual[N+1] -= row_scales[N+1] * init
-            for k in 1:N
-                residual[N+1+k] -= load_fc[k] - gen_fc[k]
-            end
-            multipliers = F \ residual
-            mul!(query, Ms', multipliers, -1.0, 1.0)
-            for r in 1:4, k in 1:N
-                j = (r-1)*N+k
-                result[r,k] = query[j] / scales[j]
-            end
-            return result
+            q  = vec(qm')
+            fill!(RHS, 0.)
+            
+            RHS[1:4N] .= 2.0 .* (Qs'*q[1:3N])
+            RHS[4N+1] = -A*init
+            RHS[5N+1] = init
+            RHS[5N+2:6N+1] .= load_fc - gen_fc
+            s = F \ RHS
+            
+            return reshape(s[1:4N], N, dim+1)'
         end
     end
 end

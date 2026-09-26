@@ -99,7 +99,7 @@ function energy_mag()
     x0    = 0.5
     dim   = 3
     N     = 96
-    rho   = 1
+    rho   = 1 
 
     path_power_gen_data  = "data/micro_grid/PV_48h_15-min_150kW_San_Diego.csv"
     path_power_load_data = "data/micro_grid/load_15min_max100kW_SanDiego_Building.csv"

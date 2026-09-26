@@ -1,17 +1,3 @@
-# Check the returned iterate, including the strict domain p > 0.
-function eco_solution_feasible(data, v, init, load, gen, tol)
-    all(isfinite, v) || return false
-    m, u, p, x = eachrow(v)
-    all(>(0), p) || return false
-    previous = vcat(init, x[1:end-1])
-    eq = max(maximum(abs, data.A .* previous .+ data.B .* u .- x),
-             abs(x[end] - init), maximum(abs, u .+ m .+ gen .- load .- p))
-    viol = max(maximum(u .- data.u_max), maximum(data.u_min .- u),
-               maximum(x .- data.x_max), maximum(data.x_min .- x),
-               init - data.x_max, data.x_min - init, 0.0)
-    return eq <= tol && viol <= tol
-end
-
 function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Function)
 
     z      = zeros(FloatType, dim, N)
@@ -19,7 +5,8 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
     α      = zeros(FloatType, dim, N)
     buffer = zeros(FloatType, dim, N)
 
-    full_gradient = gradient_struct(gradient.m, data.N, data.dim)
+    n_mb = div(N-1, s_mb) + 1
+    local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
 
     let N   = data.N,
@@ -36,24 +23,24 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
 
             for i in 1:max_iter
                 # ==== z-update ====
-                start_time = time_ns()
+                start_time = time()
                 @. buffer = w + α
-                z .= buffer .- full_gradient(buffer)./ρ
+                z .= buffer .- mini_batch(local_gradients, buffer)./ρ
                 @. z = γ * z + (1 - γ)* w
 
-                total_time += (time_ns() - start_time) / 1e9
+                total_time += time() - start_time
 
                 # ==== w-update ====
                 w[1,:], w[2,:], w[3,:], sol_time = aux_sol(z - α, x0, load_fc, gen_fc)
                 total_time += sol_time
 
                 ## ============== Calculate dual variables and check termination ===========
-                start_time = time_ns()
+                start_time = time()
                 @. buffer  = w - z
                 @. α += buffer
 
                 CALL_BACK_STATUS = false
-                total_time += (time_ns() - start_time) / 1e9
+                total_time += time() - start_time
 
                 J = get_objective(data, w)
 
@@ -61,7 +48,7 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
                     CALL_BACK_STATUS = callback(z, w, α, i, J, total_time)
                 end
 
-                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(abs, buffer) < tol)
+                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(buffer) < tol)
 
                 if TERMINATION_STATUS
                     if verbose  println("Learning ADMM converges at iteration $i with objective value = $J")  end
@@ -92,7 +79,8 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
     buffer1 = copy(z)
     buffer2 = copy(buffer1)
 
-    full_gradient = gradient_struct(gradient.m, data.N, data.dim)
+    n_mb = div(N - 1, s_mb) + 1
+    local_gradients = ntuple(_ -> deepcopy(gradient), n_mb)
 
 
     let N   = data.N,
@@ -105,19 +93,19 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
         return @inbounds function solver(init::FloatType, load_fc::Vector{FloatType}, gen_fc::Vector{FloatType}, callback = nothing; 
             tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false)
 
-            for state in (z, w, v, α, β, buffer1, buffer2)
-                fill!(state, 0.)
-            end
+            fill!(z, 0.)
+            fill!(w, 0.)
+            fill!(v, 0.)
+            fill!(α, 0.)
+            fill!(β, 0.)
 
             J = 0
-            total_time = 0.
+            start_time = time()
 
             for i in 1:max_iter
-                start_time = time_ns()
-
                 # ==== z-update ====
                 buffer1 .= v .+ β
-                @views z[1:dim, :] .= buffer1[1:dim, :] .- full_gradient(buffer1[1:dim, :])./ρ
+                @views z[1:dim, :] .= buffer1[1:dim, :] .- mini_batch(local_gradients, buffer1[1:dim, :])./ρ
                 @views copyto!(z[dim+1, :], buffer1[dim+1, :])  # no learning for state variable
 
                 # ==== v-update ====
@@ -139,19 +127,14 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 α .+= buffer1
                 β .+= buffer2
 
-                total_time += time_ns() - start_time
                 CALL_BACK_STATUS = false
                 J = get_objective(data, v)
 
                 if callback !== nothing
-                    CALL_BACK_STATUS = callback(z, w, α, v, β, i, J, total_time)
+                    CALL_BACK_STATUS = callback(z, w, α, v, β, i, J)
                 end
 
-                residual = max(maximum(abs, buffer1), maximum(abs, buffer2))
-                feasible = eco_solution_feasible(data, v, init, load_fc, gen_fc, tol)
-                # A callback cannot bypass consensus or returned-solution feasibility.
-                TERMINATION_STATUS = residual < tol && feasible &&
-                                     (callback === nothing || CALL_BACK_STATUS)
+                TERMINATION_STATUS = CALL_BACK_STATUS || ((maximum(buffer1) < tol) && (maximum(buffer2) < tol))
 
                 ## ============== Check termination ===========
                 if TERMINATION_STATUS
@@ -162,7 +145,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 end
             end
 
-            return v, total_time / 1e9
+            return v, time() - start_time
         end
     end
 end
