@@ -6,7 +6,7 @@ Run from the repository root after benchmarking both horizons::
     python script/power_grid/power_grid_boxplot.py
 
 Julia results come from ``power_grid_table.jl`` in
-``data/solving_data/power_table_time_gap=0.01/``. DC3 results come from
+``data/solving_data/power_table_time_gap=1.0/``. DC3 results come from
 ``DC3/power_grid/benchmark/results/``. Both quantities use logarithmic axes;
 exact zeros are drawn at ``FLOOR``.
 """
@@ -22,7 +22,7 @@ import numpy as np
 
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-G_OPT = 0.01
+G_OPT = 1.0
 OUT = os.path.join(REPO, "data", "solving_data", f"power_table_time_gap={G_OPT}")
 DC3_OUT = os.path.join(REPO, "DC3", "power_grid", "benchmark", "results")
 HORIZONS = [96, 192]
@@ -40,7 +40,10 @@ METHODS = [
 
 
 def julia_results_file(N: int) -> str:
-    pattern = os.path.join(OUT, f"results_N={N}_*optgap={G_OPT}_*.csv")
+    # Julia prints integral floating-point values compactly (1.0 as "1") in
+    # result filenames, while the enclosing directory retains Python's "1.0".
+    optgap_token = format(G_OPT, "g")
+    pattern = os.path.join(OUT, f"results_N={N}_*optgap={optgap_token}_*.csv")
     matches = sorted(glob.glob(pattern))
     if len(matches) != 1:
         raise FileNotFoundError(
