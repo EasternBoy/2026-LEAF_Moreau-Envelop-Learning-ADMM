@@ -26,24 +26,21 @@ G_OPT = 0.01
 OUT = os.path.join(REPO, "data", "solving_data", f"power_table_time_gap={G_OPT}")
 DC3_OUT = os.path.join(REPO, "DC3", "power_grid", "benchmark", "results")
 HORIZONS = [96, 192]
-FEAS_TOL = 1e-4
 FLOOR = 1e-17
 BASE_SIZE = 10
 LABEL_SIZE = 15
 TICK_SIZE = 1.1 * LABEL_SIZE
 YLABEL_SIZE = 1.5 * LABEL_SIZE
 METHODS = [
-    ("IPOPT", "#2a78d6"),
-    ("MadNLP", "#9367bd"),
-    ("ADMM", "#8c8c8c"),
-    ("MEL-ADMM", "#eb6834"),
-    ("sMEL-ADMM", "#d9a225"),
+    ("IPOPT", "#e377c2"),
+    ("ADMM", "#2a78d6"),
+    ("sMEL-ADMM", "#eb6834"),
     ("DC3", "#1baf7a"),
 ]
 
 
 def julia_results_file(N: int) -> str:
-    pattern = os.path.join(OUT, f"results_N={N}_optgap={G_OPT}_*.csv")
+    pattern = os.path.join(OUT, f"results_N={N}_*optgap={G_OPT}_*.csv")
     matches = sorted(glob.glob(pattern))
     if len(matches) != 1:
         raise FileNotFoundError(
@@ -103,7 +100,7 @@ def boxes(ax, values):
     ax.grid(axis="y", color="#e4e3df", linewidth=0.6)
     ax.set_axisbelow(True)
     ax.set_xticks(range(1, len(METHODS) + 1))
-    ax.set_xticklabels([method for method, _ in METHODS], rotation=25, ha="right")
+    ax.set_xticklabels([method for method, _ in METHODS], rotation=0, ha="center")
 
 
 def figure(metric: int, ylabel: str, references, filename: str):
@@ -139,7 +136,7 @@ def main():
            [(G_OPT, rf"$g_{{\mathrm{{opt}}}} = {G_OPT}\%$", "--")],
            "power_grid_gap_boxplot")
     figure(1, "Constraint violation",
-           [(FEAS_TOL, r"tolerance $10^{-4}$", "--")],
+           [],
            "power_grid_viol_boxplot")
 
 

@@ -22,7 +22,7 @@ const ADMM_RHO = 1.
 const SMEL_STATE_SCALE = 50.0 
 const s_mb = 24
 const NSAMPLES = 1000
-const G_OPT = 1.
+const G_OPT = 0.01
 const OUTPUT_DIR = joinpath(REPO_ROOT, "data", "solving_data",
     BENCHMARK_MODE == :time ? "power_table_time_gap=$(G_OPT)" : "power_table_opt_gap")
 const SEED = 20262309
@@ -50,7 +50,7 @@ include(joinpath(POWER_GRID_EXAMPLE_DIR, "eMPC_ADMM.jl"))
 include(joinpath(POWER_GRID_EXAMPLE_DIR, "eMPC_L-ADMM.jl"))
 
 # Select the benchmark horizon without changing energy_mag() for other experiments.
-N = 192
+N = 96
 const INPUT_TAG = "N=$(N)"
 const POWER_TABLE_INPUT_DIR = joinpath(REPO_ROOT, "data", "solving_data", "power_table_inputs")
 const INPUT_FILE = joinpath(POWER_TABLE_INPUT_DIR, "test_instances_$(INPUT_TAG).npz")
@@ -194,13 +194,13 @@ function admm_runner(name, target)
         else
             solve(x0, load, gen, split_cb; tol = solver_tol, max_iter = MAX_ITER)
         end
-        if name == "sMEL-ADMM"
+        if name in ("MEL-ADMM", "sMEL-ADMM")
             target.reached = target.reached && target.residual < solver_tol &&
                 eco_solution_feasible(d, result[1], x0, load, gen, solver_tol)
         end
         stopping_mode = if BENCHMARK_MODE != :time
-            name == "sMEL-ADMM" ? "residual_and_feasibility" : "residual_tolerance"
-        elseif name == "sMEL-ADMM"
+            name in ("MEL-ADMM", "sMEL-ADMM") ? "residual_and_feasibility" : "residual_tolerance"
+        elseif name in ("MEL-ADMM", "sMEL-ADMM")
             "gap_residual_and_feasibility"
         else
             "gap_callback_with_solver_termination"
@@ -359,8 +359,8 @@ function render_results(summaries, path)
                             s.solver, s.residual_tol, timing, gap, violation))
     end
     condition = BENCHMARK_MODE == :time ?
-        "`g_opt ≤ $(G_OPT)%` plus each solver's native checks; sMEL-ADMM also requires its residual tolerance and returned-solution feasibility" :
-        "the solver-specific residual tolerance; sMEL-ADMM also requires returned-solution feasibility"
+        "`g_opt ≤ $(G_OPT)%` plus each solver's native checks; MEL-ADMM and sMEL-ADMM also require their residual tolerance and returned-solution feasibility" :
+        "the solver-specific residual tolerance; MEL-ADMM and sMEL-ADMM also require returned-solution feasibility"
     md = """
 # Power-grid benchmark: solving time and optimality gap
 

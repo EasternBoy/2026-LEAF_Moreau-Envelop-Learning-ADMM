@@ -17,11 +17,11 @@ end
 
 const FloatType = Float64
 const BENCHMARK_MODE = :time # Change to :optimality_gap for the table's gap column.
-const tol = 1e-4
+const tol = 1e-2
 const ADMM_TOL = 1e-2
 const s_mb = 24
 const NSAMPLES = 1000
-const G_OPT = 0.01
+const G_OPT = 1.  
 const OUTPUT_DIR = joinpath(REPO_ROOT, "data", "solving_data",
     BENCHMARK_MODE == :time ? "power_table_time_gap=$(G_OPT)" : "power_table_opt_gap")
 const SEED = 20262309

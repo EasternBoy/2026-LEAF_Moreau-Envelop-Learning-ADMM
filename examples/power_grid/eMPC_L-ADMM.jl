@@ -1,7 +1,18 @@
 # Check the returned iterate, including the strict domain p > 0.
 function eco_solution_feasible(data, v, init, load, gen, tol)
     all(isfinite, v) || return false
-    m, u, p, x = eachrow(v)
+    m, u, p = eachrow(@view v[1:3, :])
+    if size(v, 1) == 3
+        x = similar(u)
+        previous_state = init
+        for k in eachindex(u)
+            x[k] = data.A * previous_state + data.B * u[k]
+            previous_state = x[k]
+        end
+    else
+        x = @view v[4, :]
+    end
+    all(isfinite, x) || return false
     all(>(0), p) || return false
     previous = vcat(init, x[1:end-1])
     eq = max(maximum(abs, data.A .* previous .+ data.B .* u .- x),
@@ -61,7 +72,10 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
                     CALL_BACK_STATUS = callback(z, w, α, i, J, total_time)
                 end
 
-                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(abs, buffer) < tol)
+                residual = maximum(abs, buffer)
+                feasible = eco_solution_feasible(data, w, x0, load_fc, gen_fc, tol)
+                TERMINATION_STATUS = residual < tol && feasible &&
+                                     (callback === nothing || CALL_BACK_STATUS)
 
                 if TERMINATION_STATUS
                     if verbose  println("Learning ADMM converges at iteration $i with objective value = $J")  end
