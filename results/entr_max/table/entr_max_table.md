@@ -10,18 +10,19 @@ largest violation `max(max(A w − b), max(−w), |1ᵀw − 1|)` of each return
 (IPOPT and sLME-ADMM from the run with that g_opt; DC3 has a single run).
 IPOPT and sLME-ADMM use oracle-assisted stopping against the known optimum;
 reference-solve cost is excluded. Every method's entropy is scored at max(w, 0);
-negative entries count in Constr. viol., and a point is feasible when that is ≤ 1e-4.
+negative entries count in Constr. viol., and a point is feasible when that is ≤ 0.0001.
+All three methods are scored by `src/metrics.jl` from their saved solutions.
 
 |  | n | m | IPOPT mean (max) | sLME-ADMM mean (max) | DC3 + correction mean (max) |
 |---|---|---|---|---|---|
-| solving time (g_opt ≤ 1%) | 100 | 1 | 0.58 (0.88) | 0.64 (1.35) [13.2 it.] | **0.30 (0.56)** |
-| solving time (g_opt ≤ 1%) | 100 | 10 | 0.78 (1.63) | **0.78 (1.08)** [19.8 it.] | unable to achieve |
-| solving time (g_opt ≤ 1%) | 1000 | 10 | 5.49 (9.13) | **1.46 (1.76)** [10.0 it.] | unable to achieve |
-| solving time (g_opt ≤ 1%) | 1000 | 100 | 47.14 (63.97) | **15.16 (17.36)** [46.5 it.] | unable to achieve |
-| solving time (g_opt ≤ 0.1%) | 100 | 1 | **0.58 (0.83)** | 0.75 (1.42) [13.2 it.] | unable to achieve |
-| solving time (g_opt ≤ 0.1%) | 100 | 10 | 0.99 (2.65) | **0.78 (1.04)** [19.8 it.] | unable to achieve |
-| solving time (g_opt ≤ 0.1%) | 1000 | 10 | 5.76 (8.88) | **1.79 (2.20)** [10.0 it.] | unable to achieve |
-| solving time (g_opt ≤ 0.1%) | 1000 | 100 | 50.75 (64.27) | **15.78 (17.80)** [46.5 it.] | unable to achieve |
+| solving time (g_opt ≤ 1%) | 100 | 1 | 0.53 (1.34) | 0.53 (1.29) [13.2 it.] | **0.31 (0.60)** |
+| solving time (g_opt ≤ 1%) | 100 | 10 | **0.71 (1.07)** | 0.76 (1.12) [19.8 it.] | unable to achieve |
+| solving time (g_opt ≤ 1%) | 1000 | 10 | 5.43 (9.07) | **1.47 (1.80)** [10.0 it.] | unable to achieve |
+| solving time (g_opt ≤ 1%) | 1000 | 100 | 47.69 (119.25) | **12.48 (17.04)** [46.5 it.] | unable to achieve |
+| solving time (g_opt ≤ 0.1%) | 100 | 1 | **0.53 (0.85)** | 0.64 (1.74) [13.2 it.] | unable to achieve |
+| solving time (g_opt ≤ 0.1%) | 100 | 10 | 0.92 (1.49) | **0.76 (1.01)** [19.8 it.] | unable to achieve |
+| solving time (g_opt ≤ 0.1%) | 1000 | 10 | 5.91 (9.69) | **1.99 (2.59)** [10.0 it.] | unable to achieve |
+| solving time (g_opt ≤ 0.1%) | 1000 | 100 | 51.27 (67.76) | **13.41 (20.15)** [46.5 it.] | unable to achieve |
 | Opt. gap (%) | 100 | 1 | 0 | 3.96e-05 (8.7e-05) | 0.0399 (0.242) |
 | Opt. gap (%) | 100 | 10 | 0 | 0.000152 (0.00483) | 0.837 (16.4) |
 | Opt. gap (%) | 1000 | 10 | 0 | 0.000949 (0.00215) | 2.28 (16.9), feasible 19% |
