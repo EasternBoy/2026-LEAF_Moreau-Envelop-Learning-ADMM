@@ -45,7 +45,9 @@ IS_WORKER && include(joinpath(REPO, "examples", "entr_max", "JuMPsolver.jl"))
 IS_WORKER && include(joinpath(REPO, "examples", "entr_max", "LME-ADMM.jl"))
 IS_WORKER && (ipopt_feas_tol = FEAS_TOL)
 
-entropy(w) = all(isfinite, w) && all(>=(0), w) ? sum(x -> x == 0 ? 0.0 : x * log(x), w) : NaN
+# One convention for every method (entr_max_table.py scores DC3 + correction the same way):
+# entropy is scored at max(w, 0), with 0 log 0 = 0, and any −w is counted in max_violation.
+entropy(w) = all(isfinite, w) ? sum(x -> x <= 0 ? 0.0 : x * log(x), w) : NaN
 max_violation(A, b, w) = max(maximum(A * w .- b), maximum(-w), abs(sum(w) - 1), 0.0)
 
 function instances()
@@ -111,9 +113,9 @@ function run_method(meth, gopt, gname, A, b, Jopt, mgrad)
         viol[k] = max_violation(para.A, para.b, w)
         k % 5 == 0 && GC.gc()
     end
-    npzwrite(path, Dict("time_ms" => t_ms, "gap_pct" => gap, "max_viol" => viol, "iterations" => iters, "domain_valid" => domain_valid, "feasible" => domain_valid .& (viol .<= REPORT_TOL), "metrics_version" => 2, "oracle_assisted" => true))
+    npzwrite(path, Dict("time_ms" => t_ms, "gap_pct" => gap, "max_viol" => viol, "iterations" => iters, "domain_valid" => domain_valid, "feasible" => isfinite.(gap) .& (viol .<= REPORT_TOL), "metrics_version" => 2, "oracle_assisted" => true))
     @printf("n=%d m=%d %-9s g_opt=%s%%: time %.3f (%.3f) ms, gap %.3g (%.3g) %%, feasible %.3f\n",
-            n, m, meth, gname, mean(t_ms), maximum(t_ms), mean(gap), maximum(gap), mean(domain_valid .& (viol .<= REPORT_TOL)))
+            n, m, meth, gname, mean(t_ms), maximum(t_ms), mean(gap), maximum(gap), mean(isfinite.(gap) .& (viol .<= REPORT_TOL)))
 end
 
 function worker()
@@ -141,7 +143,7 @@ function run_missing()
 end
 
 fmt_time(x) = @sprintf("%.2f (%.2f)", mean(x), maximum(x))
-fmt_gap(x)  = all(isfinite, x) ? @sprintf("%.3g (%.3g)", mean(x), maximum(x)) : "undefined (outside objective domain)"
+fmt_gap(x)  = all(isfinite, x) ? @sprintf("%.3g (%.3g)", mean(x), maximum(x)) : "undefined (non-finite solution)"
 fmt_viol(x) = @sprintf("%.1e (%.1e)", mean(x), maximum(x))
 
 function dc3_cell(nn, mm, gopt)
@@ -209,9 +211,10 @@ function render()
     largest violation `max(max(A w − b), max(−w), |1ᵀw − 1|)` of each returned point
     (IPOPT and sLME-ADMM from the run with that g_opt; DC3 has a single run).
     IPOPT and sLME-ADMM use oracle-assisted stopping against the known optimum;
-    reference-solve cost is excluded. Entropy gaps require w >= 0 exactly.
+    reference-solve cost is excluded. Every method's entropy is scored at max(w, 0);
+    negative entries count in Constr. viol., and a point is feasible when that is ≤ 1e-4.
 
-    |  | n | m | IPOPT mean (max) | sLME-ADMM mean (max) | DC3 mean (max) |
+    |  | n | m | IPOPT mean (max) | sLME-ADMM mean (max) | DC3 + correction mean (max) |
     |---|---|---|---|---|---|
     $(join(rows, "\n"))
     """

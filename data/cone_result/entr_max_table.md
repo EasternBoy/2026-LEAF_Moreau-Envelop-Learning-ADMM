@@ -9,9 +9,10 @@ iterations; — means the data has not been produced yet.  Constr. viol. is the
 largest violation `max(max(A w − b), max(−w), |1ᵀw − 1|)` of each returned point
 (IPOPT and sLME-ADMM from the run with that g_opt; DC3 has a single run).
 IPOPT and sLME-ADMM use oracle-assisted stopping against the known optimum;
-reference-solve cost is excluded. Entropy gaps require w >= 0 exactly.
+reference-solve cost is excluded. Every method's entropy is scored at max(w, 0);
+negative entries count in Constr. viol., and a point is feasible when that is ≤ 1e-4.
 
-|  | n | m | IPOPT mean (max) | sLME-ADMM mean (max) | DC3 mean (max) |
+|  | n | m | IPOPT mean (max) | sLME-ADMM mean (max) | DC3 + correction mean (max) |
 |---|---|---|---|---|---|
 | solving time (g_opt ≤ 1%) | 100 | 1 | 0.58 (0.88) | 0.64 (1.35) [13.2 it.] | **0.30 (0.56)** |
 | solving time (g_opt ≤ 1%) | 100 | 10 | 0.78 (1.63) | **0.78 (1.08)** [19.8 it.] | unable to achieve |

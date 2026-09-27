@@ -1,6 +1,7 @@
 > Protocol update: regenerate CP-table artifacts with both scripts (`--force`).
-> Version-1 results used tolerant domain checks. Feasibility now requires w >= 0;
-> invalid entropy objectives/gaps are undefined. IPOPT and sLME rows are
+> All methods share one scoring convention: entropy is evaluated at max(w, 0)
+> (0 log 0 = 0), negative entries count in `max_viol`, and a point is feasible
+> when `max_viol ≤ 1e-4`. IPOPT and sLME rows are
 > oracle-assisted time-to-target measurements, excluding reference-solving cost.
 
 # Cone-program benchmark data (maximum-entropy problem)
