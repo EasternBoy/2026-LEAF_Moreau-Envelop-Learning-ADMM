@@ -1,7 +1,7 @@
 """Instance generation for the maximum-entropy cone program.
 
 The generating distribution is copied from the two-argument constructor
-``data_opt(n, m)`` in ``examples/entr_max/maxEntropy.jl``::
+``data_opt(n, m)`` in ``problems/entr_max/problem.jl``::
 
     A = rand(Uniform(0,1), m, n)
     b = [sum(A[i,:]) / (1.06 n) for i in 1:m]

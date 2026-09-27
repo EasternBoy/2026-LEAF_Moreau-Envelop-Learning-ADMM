@@ -1,27 +1,61 @@
+# Repository layout
+
+| folder | contents |
+|---|---|
+| `src/` | code shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility) |
+| `problems/<p>/` | one problem's library code, included by the experiments, never run directly |
+| `experiments/<p>/` | runnable scripts: benchmarks, data generation, ICNN training, tables and figures |
+| `python/` | ICNN (Moreau-envelope model) training modules used by `experiments/*/train.py` |
+| `models/<p>/` | trained ICNNs (`.json` read by Julia, `.pkl` from JAX); `models/legacy/` holds the former `model/` folder |
+| `data/<p>/` | training data (`training/`) and input data (`micro_grid/` for the power grid) |
+| `results/<p>/` | benchmark outputs, tables and figures |
+| `DC3/` | the DC3 + correction baseline (Python package, see DC3/README.md) |
+| `archive/` | code that nothing runs any more (former `src/`, `script/`), kept for reference |
+
+Problems `<p>`: `entr_max` (maximum-entropy cone program), `mpc`, `power_grid`
+(economic MPC of a PV + BESS microgrid), `mvee` (minimum-volume enclosing ellipsoid).
+Every `problems/<p>/` uses the same file names:
+
+| file | contents |
+|---|---|
+| `problem.jl` | problem data and objective (`data_opt`, `energy_mag`, ...) |
+| `setup.jl` | loads the trained ICNN, defines the stopping callbacks and `pick_solver` |
+| `jump_solver.jl` | the JuMP/IPOPT baseline |
+| `admm.jl` | the ADMM baseline |
+| `lme_admm.jl` | LME-ADMM and sLME-ADMM |
+| `utils.jl`, `matrix_tools.jl` | ICNN evaluation and its gradient |
+
+`mpc` has no `setup.jl` (its `utils.jl` loads the ICNN); `mvee` also has
+`convex_solver.jl` (a Convex.jl formulation).
+
+Run every script from the repository root (the scripts call `Pkg.activate(".")`
+and use paths relative to the root).
+
 # Run scripts
 ## Whole table
 Solving-time / optimality-gap table for the maximum-entropy cone program:
-the IPOPT and sLME-ADMM columns.  The DC3 column is filled by entr_max_table.py.
+the IPOPT and sLME-ADMM columns.  The DC3 + correction column is filled by
+experiments/entr_max/table.py.
 
-  julia --project=. script/entropy_max/entr_max_table.jl            # use stored data, run what is missing
-  julia --project=. script/entropy_max/entr_max_table.jl --force    # recompute everything
+  julia --project=. experiments/entr_max/table.jl            # use stored data, run what is missing
+  julia --project=. experiments/entr_max/table.jl --force    # recompute everything
 
 Internal mode (one (n, m) per process, because `n` is a `const` in
-examples/entr_max/maxEntropy.jl):
+problems/entr_max/problem.jl):
 
-  julia --project=. --threads=auto script/entropy_max/entr_max_table.jl worker n m [--instances-only] [--force]
+  julia --project=. --threads=auto experiments/entr_max/table.jl worker n m [--instances-only] [--force]
 
-Data and the rendered table live in data/cone_result (see README.md there).
+Data and the rendered table live in results/entr_max/table (see README.md there).
 
 
 ## Each row of table
-One (n, m) row block of the maximum-entropy table (entr_max_table.jl) over
+One (n, m) row block of the maximum-entropy table (table.jl) over
 N_SAMPLES = 1000 instances: solving time (g_opt ≤ 0.1%), solving time
 (g_opt ≤ 1%), Constr. viol. and Opt. gap (%) for IPOPT and sLME-ADMM.
 
-  julia --project=. script/entropy_max/entr_max_row.jl n m            # use stored data, run what is missing
-  julia --project=. script/entropy_max/entr_max_row.jl n m --force    # recompute this (n, m)
+  julia --project=. experiments/entr_max/row.jl n m            # use stored data, run what is missing
+  julia --project=. experiments/entr_max/row.jl n m --force    # recompute this (n, m)
 
-The DC3 + correction column is read from data/cone_result/DC3-n=..-m=...npz, which
-entr_max_table.py writes; it shows — when that file does not exist.
-The rows are printed and written to data/cone_result/entr_max_row-n=..-m=...md.
+The DC3 + correction column is read from results/entr_max/table/DC3-n=..-m=...npz, which
+experiments/entr_max/table.py writes; it shows — when that file does not exist.
+The rows are printed and written to results/entr_max/table/entr_max_row-n=..-m=...md.

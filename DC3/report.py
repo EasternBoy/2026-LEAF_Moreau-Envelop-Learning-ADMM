@@ -18,11 +18,11 @@ from .common.io_utils import DC3_ROOT, load_json, save_csv
 from .common.metrics import format_table
 
 METHOD_NOTES = {
-    "Ipopt": "reference NLP solver used by examples/*/benchmark*.jl",
+    "Ipopt": "reference NLP solver used by experiments/*/benchmark*.jl",
     "Ipopt(early-stop)": "Ipopt with the repo's optimality-gap callback (benchmark setting)",
     "Clarabel(cvxpy)": "conic reference solver, tol 1e-9",
-    "sLME-ADMM": "examples/entr_max/LME-ADMM.jl :: sLME_ADMM",
-    "LME-ADMM(split)": "examples/power_grid/eMPC_L-ADMM.jl :: LME_ADMM_split",
+    "sLME-ADMM": "problems/entr_max/lme_admm.jl :: sLME_ADMM",
+    "LME-ADMM(split)": "problems/power_grid/lme_admm.jl :: LME_ADMM_split",
     "DC3 + correction": "this implementation (completion + correction)",
 }
 
@@ -145,10 +145,10 @@ def write_report(app: str, tag: str = "") -> str:
         "The `CLARABEL(cvxpy)` row is the **reference**: its gap is 0 by definition.  Its",
         "latency includes cvxpy canonicalisation on every call, so it is *not* a fair",
         "solver-speed comparison - use the Julia `Ipopt` rows, which report",
-        "`JuMP.solve_time` on a pre-built parametric model, exactly as `examples/` does.",
+        "`JuMP.solve_time` on a pre-built parametric model, exactly as `problems/` does.",
         "",
         "Gap is `100*|J - J_ref|/|J_ref|` against the reference solver, matching the",
-        "convention of `examples/*/benchmark*.jl`.  `gap% mean(feas)` restricts the",
+        "convention of `experiments/*/benchmark*.jl`.  `gap% mean(feas)` restricts the",
         "average to instances that pass the feasibility test, so an infeasible point that",
         "undercuts the optimum is not reported as a better solution.",
         "",
@@ -193,7 +193,7 @@ def write_report(app: str, tag: str = "") -> str:
             "## Julia baselines",
             "",
             "`julia_baselines.json` not present - the LME-ADMM / Ipopt baselines from",
-            "`examples/` were **not executed** for this run.  Produce them with",
+            "`experiments/` were **not executed** for this run.  Produce them with",
             f"`julia --project=. DC3/julia/baselines_{'cone' if 'cone' in app else 'power'}.jl "
             f"DC3/results/{app + (f'-{tag}' if tag else '')}`.",
             "",

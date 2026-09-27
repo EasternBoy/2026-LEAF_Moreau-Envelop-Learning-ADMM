@@ -71,7 +71,7 @@ def save_csv(path: str, columns: Mapping[str, Any]) -> None:
     """Minimal CSV writer (keeps the repo dependency-free of pandas at runtime).
 
     Matches the column-per-method layout used by
-    `data/MVEE_data/benchmark_results/*.csv`.
+    `results/mvee/benchmark/*.csv`.
     """
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     names = list(columns.keys())

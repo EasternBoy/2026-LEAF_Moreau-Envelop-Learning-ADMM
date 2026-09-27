@@ -1,5 +1,5 @@
 {
-  "_comment": "Economic MPC of examples/power_grid (energy_mag(), N=96, dT=0.25h). dc3.corr_lr / obj_scale / soft_weight were selected by DC3/tune.py on the VALIDATION split only (see results/power_grid-tune/tune_results.json).",
+  "_comment": "Economic MPC of problems/power_grid (energy_mag(), N=96, dT=0.25h). dc3.corr_lr / obj_scale / soft_weight were selected by DC3/tune.py on the VALIDATION split only (see results/power_grid-tune/tune_results.json).",
   "problem": {
     "N": 96,
     "feature_mode": "x0_load_gen",

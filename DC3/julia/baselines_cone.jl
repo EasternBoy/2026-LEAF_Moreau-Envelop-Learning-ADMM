@@ -29,17 +29,17 @@ include(joinpath(@__DIR__, "metrics.jl"))
 const n::Int = n_
 const m::Int = m_
 const max_opt_gap::FloatType = length(ARGS) >= 2 ? parse(FloatType, ARGS[2]) : 0.1
-# benchmarkOG.jl uses `max(div(n, nthreads())+1, 50)`.  That formula exceeds `n`
-# when Julia runs single-threaded (or when n is small), and examples/entr_max/
+# experiments/entr_max/benchmark.jl uses `max(div(n, nthreads())+1, 50)`.  That formula exceeds `n`
+# when Julia runs single-threaded (or when n is small), and problems/entr_max/
 # utils.jl::mini_batch then indexes out of bounds - so it is additionally clamped to n.
 # Start Julia with `--threads=auto` to reproduce the multi-threaded setting.
 const s_mb::Int = min(max(div(n, max(Threads.nthreads(), 1)) + 1, 50), n)
 
 GUROBI_ENV = nothing                   # skip Gurobi.Env() (no license here)
-include(joinpath(REPO, "examples", "entr_max", "maxEntropy.jl"))
-include(joinpath(REPO, "examples", "entr_max", "preprocess.jl"))
-include(joinpath(REPO, "examples", "entr_max", "JuMPsolver.jl"))
-include(joinpath(REPO, "examples", "entr_max", "LME-ADMM.jl"))
+include(joinpath(REPO, "problems", "entr_max", "problem.jl"))
+include(joinpath(REPO, "problems", "entr_max", "setup.jl"))
+include(joinpath(REPO, "problems", "entr_max", "jump_solver.jl"))
+include(joinpath(REPO, "problems", "entr_max", "lme_admm.jl"))
 
 @printf("cone baselines: %d instances, n=%d, m=%d, max_opt_gap=%.4g%%\n", count_, n, m, max_opt_gap)
 
@@ -59,7 +59,7 @@ for k in 1:count_
     b = Vector{FloatType}(binst[k, :])
     para = data_opt(n, m, A, b, 1.0, x -> x * log(x))
 
-    # ground truth (tol 1e-8), exactly as in benchmarkOG.jl
+    # ground truth (tol 1e-8), exactly as in experiments/entr_max/benchmark.jl
     wh, t_hi, J_opt = JuMP_solver("Ipopt", para, 1e-8)
     push!(metrics_hi, cone_metrics(A, b, wh))
     J_ipopt_hi[k] = J_opt; t_ipopt_hi[k] = t_hi

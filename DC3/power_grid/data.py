@@ -1,10 +1,10 @@
 """Instance generation for the economic-MPC benchmark.
 
-`energy_mag()` in ``examples/power_grid/power_system.jl`` defines a *single*
+`energy_mag()` in ``problems/power_grid/problem.jl`` defines a *single*
 instance: ``x0 = 0.5`` and the first ``N = 96`` samples of
 
-    data/micro_grid/PV_48h_15-min_150kW_San_Diego.csv        (column 2, kW)
-    data/micro_grid/load_15min_max100kW_SanDiego_Building.csv (column 2, kW)
+    data/power_grid/micro_grid/PV_48h_15-min_150kW_San_Diego.csv        (column 2, kW)
+    data/power_grid/micro_grid/load_15min_max100kW_SanDiego_Building.csv (column 2, kW)
 
 DC3 is a *parametric* solver, so a family of instances is required.  The family
 used here keeps the plant and the cost function untouched and varies only the
@@ -21,7 +21,7 @@ pairing is retained only under explicit ``legacy_offsets`` for historical
 interpolation experiments (including nominal test instance 0).
 
 The ``x0`` range brackets the pool used for the ADMM training data in
-``data_eMPC_power.jl`` (``train_pool = [1/2, 2/3, 3/4]``, ``test_pool = [3/5]``).
+``experiments/power_grid/data_gen.jl`` (``train_pool = [1/2, 2/3, 3/4]``, ``test_pool = [3/5]``).
 """
 
 from __future__ import annotations

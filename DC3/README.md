@@ -7,8 +7,8 @@ applied to the two applications of this repository:
 
 | folder | problem | source of truth |
 |---|---|---|
-| [`entr_max/`](entr_max/README.md) | maximum-entropy cone program | `examples/entr_max` |
-| [`power_grid/`](power_grid/README.md) | economic MPC of a PV + BESS microgrid | `examples/power_grid` |
+| [`entr_max/`](entr_max/README.md) | maximum-entropy cone program | `problems/entr_max` |
+| [`power_grid/`](power_grid/README.md) | economic MPC of a PV + BESS microgrid | `problems/power_grid` |
 
 The Julia drivers in `DC3/julia/` `include`
 the existing example files so that the repository's own solvers
@@ -104,7 +104,7 @@ documented per application (`obj_scale`, `soft_loss_power`, `ineq_row_scale`,
 ## How results are reported
 
 * **Objective** in the same convention as the Julia code, and the relative gap
-  `100·|J − J_ref|/|J_ref|` used by `examples/*/benchmark*.jl`.  Because that
+  `100·|J − J_ref|/|J_ref|` used by `experiments/*/benchmark*.jl`.  Because that
   absolute value hides the direction of the error, the **signed** gap and the gap
   **restricted to feasible instances** are reported next to it — an infeasible
   point that undercuts the optimum is never presented as a better solution.
