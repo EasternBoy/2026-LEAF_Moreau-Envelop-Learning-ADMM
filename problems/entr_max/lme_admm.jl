@@ -1,4 +1,5 @@
 using LDLFactorizations
+include(joinpath(@__DIR__, "..", "..", "src", "kkt.jl"))     # kkt_matrix, AffineProjection (the v-step)
 
 function aux_solver_gen(solver_name::String, para_opt::data_opt)
     model = pick_solver(solver_name)
@@ -114,23 +115,12 @@ end
     n_mb = div(n-1, s_mb) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
-    K  = spzeros(n+2m+1, n+2m+1)
-    Im = sparse(I, m, m)
-
-    K[1:n+m,      1:n+m]      = sparse(I, n+m, n+m)
-    K[n+m+1:n+2m, 1:n]        = data.A
-    K[1:n,        n+m+1:n+2m] = data.A'
-    K[n+m+1:n+2m, n+1:n+m]    = Im
-    K[n+1:n+m,    n+m+1:n+2m] = Im
-    K[n+2m+1,     1:n]        = ones(n)'
-    K[1:n,        n+2m+1]     = ones(n)
-
-    RHS               = zeros(FloatType, n+2m+1)
-    RHS[n+m+1:n+2m]  .= scale .* data.b
-    RHS[n+2m+1]       = scale
+    # equality constraints on [x; s]:  A x + s = scale·b,  1ᵀx = scale
+    M = [sparse(data.A) sparse(I, m, m); sparse(ones(1, n)) spzeros(1, m)]
+    K = kkt_matrix(M)
 
     start_time    = time_ns()
-    F   = ldl(K)
+    proj = AffineProjection(K, [scale .* data.b; scale])
 
     J = 0
 
@@ -144,8 +134,7 @@ end
         # Use the equality constraints in v-update
         @. buffer1 = (z - β + w + α)/2
         # v .= aux_sol(buffer1)
-        RHS[1:n+m] .= buffer1[1:n+m]
-        v[1:n+m]   .= (F \ RHS)[1:n+m]
+        v[1:n+m]   .= proj(buffer1[1:n+m])
         
         # ==== w-update ====
         # Use the inequality constraints in v-update

@@ -1,4 +1,5 @@
 using LDLFactorizations
+include(joinpath(@__DIR__, "..", "..", "src", "kkt.jl"))     # kkt_matrix, AffineProjection (the v-step)
 using Base.Threads
 
 
@@ -161,9 +162,9 @@ end
 
     # ── KKT matrix — factored once ──
     # Small negative regularization on dual block makes K strictly SQD for ldl
-    K = [sparse(I, n, n)    M'                              ;
-         M                  -1e-10*sparse(I, n_eq, n_eq)]
-    F = ldl(K)
+    g = zeros(FloatType, n_eq)
+    g[1:nx] .= para_opt.x0
+    proj = AffineProjection(kkt_matrix(M; δ = 1e-10), g)
 
     # ── Mini-batch gradient setup ──
     n_mb            = div(n - 1, s_mb) + 1
@@ -178,12 +179,6 @@ end
     buffer1 = copy(z)
     buffer2 = copy(z)
 
-    g = zeros(FloatType, n_eq)
-    g[1:nx] .= para_opt.x0
-
-    RHS     = zeros(FloatType, n + n_eq)
-    RHS[n+1:n+n_eq] .= g
-
     J = 0.
     start_time = time_ns()
 
@@ -195,8 +190,7 @@ end
         # ── v-step: equality projection via KKT ──
         # Solves [I M'; M 0][v; λ] = [w + β/ρ; b]
         @. buffer1 = w + β/ρ
-        RHS[1:n]        .= buffer1
-        v               .= (F \ RHS)[1:n]
+        v               .= proj(buffer1)
 
         # ── w-step: box projection ──
         @. buffer2 = v - α/ρ

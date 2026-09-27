@@ -1,3 +1,4 @@
+include(joinpath(@__DIR__, "..", "..", "src", "kkt.jl"))     # kkt_matrix, AffineProjection (the v-step)
 @inbounds function sLME_ADMM(data::data_opt, gradient::gradient_struct, callback::Union{Function, Nothing} =  nothing; 
     tol::FloatType = 1e-3, max_iter::Int = 1000, verbose::Bool = false)    
     
@@ -24,8 +25,7 @@
     K           = KKT_mat(data)
 
     start_time  = time_ns()
-    RHS         = zeros(FloatType, dim+2m)
-    F           = ldl(K)
+    proj        = AffineProjection(K, zeros(FloatType, m))
     J           = 0
 
     ρᵥ = 10ρ
@@ -50,8 +50,7 @@
         # ==== V-update ====
         # Use the inequality constraints in v-update
         @. buffer2           = W + β/ρᵥ
-        @views RHS[1:dim+m] .= buffer2
-        V                   .= (F \ RHS)[1:dim+m]
+        V                   .= proj(buffer2)
 
         ## ============== Calculate dual variables and check termination ===========
         @. buffer1  = W - Z
@@ -111,20 +110,13 @@ function KKT_mat(data::data_opt)
     A   = data.A
     dim = div(n*(n+1), 2)
 
-    K = spzeros(dim+2m, dim+2m)
     H = spzeros(m,      dim)
 
     for c in 1:m
         H[c, :] = [i==j ? A[i,c]^2 : 2A[i,c]*A[j,c] for j in 1:n for i in 1:j]
     end
 
-    K[1:dim+m,        1:dim+m]        = I(dim+m)
-    K[dim+m+1:dim+2m, 1:dim]          = H
-    K[1:dim,          dim+m+1:dim+2m] = H'
-    K[dim+m+1:dim+2m, dim+1:dim+m]    = -I(m)
-    K[dim+1:dim+m,    dim+m+1:dim+2m] = -I(m)
-
-    return K
+    return kkt_matrix([H -sparse(I, m, m)])     # constraints H P − s = 0 on [P; s]
 end
 
 

@@ -32,7 +32,7 @@ function dynamics_projection(mpc_data::MPCData_eco)
     K = [2 * (Qs' * Qs)  Ms';
          Ms              spzeros(2N+1, 2N+1)]
 
-    F = LU_decomp(K)
+    F = lu(K)
 
     RHS = MVector{6N+1}(zeros(FloatType, 6N+1))
 
