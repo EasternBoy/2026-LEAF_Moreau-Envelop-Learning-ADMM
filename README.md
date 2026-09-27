@@ -1,42 +1,27 @@
-# Moreau-envelope-learning-for-accelerated-ADMM
-Code and related materials for learning the Moreau envelope to accelerate ADMM solving.
+# Run scripts
+## Whole table
+Solving-time / optimality-gap table for the maximum-entropy cone program:
+the IPOPT and sLME-ADMM columns.  The DC3 column is filled by entr_max_table.py.
 
-## Instructions
-Organize the directories in this repo in a systematic manner. Create a directory for each major general part of the code (like ADMM algorithm, NN learning), and a directory for each major example/application.
-Do not place all code files in the root directory.
-Try your best to avoid a future major reorganization of the code.
+  julia --project=. script/entropy_max/entr_max_table.jl            # use stored data, run what is missing
+  julia --project=. script/entropy_max/entr_max_table.jl --force    # recompute everything
 
+Internal mode (one (n, m) per process, because `n` is a `const` in
+examples/entr_max/maxEntropy.jl):
 
-## To crate dataset for training and testing a NN model.
-At this time, it is temporary.
+  julia --project=. --threads=auto script/entropy_max/entr_max_table.jl worker n m [--instances-only] [--force]
 
-Set system parameters in src/data_gen/system.jl
-Set functions in src/data_gen/cost_Func.jl
-
-Run src/data_gen/data_gen.jl to create dataset and testset
-To train NN, run src/ADMM_learning/myICNN_JAX.py
-Run src/ADMM_learning/learning_ADMM.py to work with learning in ADMM iteration
-
-Compare the outcome to the optimal solution in src/data_gen/check.jl
-
-Good luck with that :D
-
-## Benchmark for Economic MPC example
-This benchmark compares three optimization approaches for **Economic Model Predictive Control (EcoMPC)**:
-
-- **Centralized Solver** (using `MadNLP`)
-- **Standard ADMM**
-- **Learning-based ADMM** 
-
-All methods solve the same constrained economic optimization problem over a prediction horizon (N = 24), and performance is evaluated in terms of:
-- Objective value (`J`)
-- Relative optimality gap (%)
-- Runtime (via `BenchmarkTools`)
-### How to run the benchmark
-- The file `EcoMPC_benchmark.jl` is located in the `src/benchmarks` directory.
-- From the **Julia REPL**, run the benchmark by including the script `include("src/benchmarks/EcoMPC_benchmark.jl")`
+Data and the rendered table live in data/cone_result (see README.md there).
 
 
+## Each row of table
+One (n, m) row block of the maximum-entropy table (entr_max_table.jl) over
+N_SAMPLES = 1000 instances: solving time (g_opt ≤ 0.1%), solving time
+(g_opt ≤ 1%), Constr. viol. and Opt. gap (%) for IPOPT and sLME-ADMM.
 
+  julia --project=. script/entropy_max/entr_max_row.jl n m            # use stored data, run what is missing
+  julia --project=. script/entropy_max/entr_max_row.jl n m --force    # recompute this (n, m)
 
-
+The DC3 + correction column is read from data/cone_result/DC3-n=..-m=...npz, which
+entr_max_table.py writes; it shows — when that file does not exist.
+The rows are printed and written to data/cone_result/entr_max_row-n=..-m=...md.

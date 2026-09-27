@@ -1,16 +1,3 @@
-# Solving-time / optimality-gap table for the maximum-entropy cone program:
-# the IPOPT and sLME-ADMM columns.  The DC3 column is filled by entr_max_table.py.
-#
-#   julia --project=. script/entropy_max/entr_max_table.jl            # use stored data, run what is missing
-#   julia --project=. script/entropy_max/entr_max_table.jl --force    # recompute everything
-#
-# Internal mode (one (n, m) per process, because `n` is a `const` in
-# examples/entr_max/maxEntropy.jl):
-#
-#   julia --project=. --threads=auto script/entropy_max/entr_max_table.jl worker n m [--instances-only] [--force]
-#
-# Data and the rendered table live in data/cone_result (see README.md there).
-
 using Pkg; Pkg.activate(joinpath(@__DIR__, "..", ".."); io = devnull)
 using Base.Threads
 using Printf, Random, SparseArrays, JSON3, LinearAlgebra, StaticArrays, NPZ, JuMP, NNlib
