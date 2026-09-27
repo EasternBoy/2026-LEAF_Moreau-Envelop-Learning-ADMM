@@ -10,7 +10,6 @@
 | `data/<p>/` | training data (`training/`) and input data (`micro_grid/` for the power grid) |
 | `results/<p>/` | benchmark outputs, tables and figures |
 | `DC3/` | the DC3 + correction baseline (Python package, see DC3/README.md) |
-| `archive/` | code that nothing runs any more (former `src/`, `script/`), kept for reference |
 
 Problems `<p>`: `entr_max` (maximum-entropy cone program), `mpc`, `power_grid`
 (economic MPC of a PV + BESS microgrid), `mvee` (minimum-volume enclosing ellipsoid).
