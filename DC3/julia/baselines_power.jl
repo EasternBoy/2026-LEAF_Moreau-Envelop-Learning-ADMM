@@ -46,7 +46,7 @@ metrics_hi = NamedTuple[]; metrics_bm = NamedTuple[]; metrics_sl = NamedTuple[]
 iterations = zeros(Int, count_)
 
 sol_hi = mpc_eco_solver("Ipopt", mpc_data, 1e-10)
-mgrad   = gradient_struct(model, s_mb, dim)
+mgrad   = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)
 aux_sol = dynamics_projection(mpc_data)
 admm    = LME_ADMM_split(mpc_data, mgrad, aux_sol)
 

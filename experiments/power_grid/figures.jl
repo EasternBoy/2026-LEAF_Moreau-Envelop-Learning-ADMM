@@ -37,7 +37,7 @@ model = ICNN(
 N   = mpc_data.N
 dim = mpc_data.dim
 
-mgrad = gradient_struct(model,  N, dim)
+mgrad = gradient_struct(model, N, dim; kernel = mmul_add_matrix!)
 
 aux_sol  = dynamics_projection(mpc_data)
 admm_sol = LME_ADMM_split(mpc_data, mgrad, aux_sol)

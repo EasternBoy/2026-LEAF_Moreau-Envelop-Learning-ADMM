@@ -71,7 +71,7 @@ stats = get_benchmark(admm_sol, (BESSinit, load, gen, ADMM_callback), samples)
 
 samples = 300
 println("========== Benchmarking LME-ADMM: \033[1m #samples = $samples, N = $N, relative optimality gap = $max_opt_gap% \033[0m ===========")
-mgrad    = gradient_struct(model,  s_mb, dim)    
+mgrad    = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)    
 aux_sol  = aux_solver_eco("Gurobi", mpc_data)
 admm_sol = LME_ADMM(mpc_data, mgrad, aux_sol)
 admm_sol(BESSinit, load, gen, ADMM_callback; verbose = true)
@@ -82,7 +82,7 @@ stats = get_benchmark(admm_sol, (BESSinit, load, gen, ADMM_callback), samples)
 
 samples = 300
 println("========== Benchmarking LME-ADMM with spliting: \033[1m number of samples = $samples, N = $N, relative optimality gap = $max_opt_gap% \033[0m ============")
-mgrad    = gradient_struct(model,  s_mb, dim)
+mgrad    = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)
 aux_sol  = dynamics_projection(mpc_data)
 admm_sol = LME_ADMM_split(mpc_data, mgrad, aux_sol)
 admm_sol(BESSinit, load, gen, sLME_ADMM_callback; verbose = true)

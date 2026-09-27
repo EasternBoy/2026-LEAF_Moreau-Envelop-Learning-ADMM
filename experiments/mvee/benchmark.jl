@@ -64,7 +64,7 @@ model = ICNN(
 data_int         = data_opt()
 solver_Clarabel  = logdet_solver("Clarabel", data_int)
 solver_Mosek     = logdet_solver("Mosek", data_int)
-mgrad            = gradient_struct(model, 1, div(data_int.n*(data_int.n+1),2))
+mgrad            = gradient_struct(model, 1, div(data_int.n*(data_int.n+1),2); kernel = mmul_add_matrix!)
 
 N_samples = 10000 # Match the loop count
 

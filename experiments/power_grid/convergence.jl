@@ -56,7 +56,7 @@ begin
 
 
     cbs_LME_ADMM = callback_struct()
-    mgrad    = gradient_struct(model,  s_mb, dim)    
+    mgrad    = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)    
     aux_sol  = aux_solver_eco("Gurobi", mpc_data)
     admm_sol = LME_ADMM(mpc_data, mgrad, aux_sol)
     callback = (args...) -> ADMM_callback_iter(args..., cbs_LME_ADMM)
@@ -64,7 +64,7 @@ begin
 
 
     cbs_sLME_ADMM = callback_struct()
-    mgrad         = gradient_struct(model,  s_mb, dim)    
+    mgrad         = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)    
     aux_sol       = dynamics_projection(mpc_data)
     admm_sol      = LME_ADMM_split(mpc_data, mgrad, aux_sol)
     callback = (args...) -> sADMM_callback_iter(args..., cbs_sLME_ADMM)
@@ -78,7 +78,7 @@ _, sol_time_Ipopt = mpc_eco_sol(BESSinit, load, gen)
 
 
 cbs_LME_ADMM = callback_struct()
-mgrad    = gradient_struct(model,  s_mb, dim)    
+mgrad    = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)    
 aux_sol  = aux_solver_eco("Gurobi", mpc_data)
 admm_sol = LME_ADMM(mpc_data, mgrad, aux_sol)
 callback = (args...) -> ADMM_callback_iter(args..., cbs_LME_ADMM)
@@ -86,7 +86,7 @@ _, sol_time_LME = admm_sol(BESSinit, load, gen, callback; tol = tol_ADMM)
 
 
 cbs_sLME_ADMM = callback_struct()
-mgrad         = gradient_struct(model,  s_mb, dim)    
+mgrad         = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)    
 aux_sol       = dynamics_projection(mpc_data)
 admm_sol      = LME_ADMM_split(mpc_data, mgrad, aux_sol)
 callback = (args...) -> sADMM_callback_iter(args..., cbs_sLME_ADMM)

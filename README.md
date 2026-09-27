@@ -2,10 +2,10 @@
 
 | folder | contents |
 |---|---|
-| `src/` | code shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility) |
+| `src/` | code shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility), `icnn.jl` (the learned Moreau envelope: ICNN, `load_model`, `gradient_struct`, `mini_batch`) |
 | `problems/<p>/` | one problem's library code, included by the experiments, never run directly |
 | `experiments/<p>/` | runnable scripts: benchmarks, data generation, ICNN training, tables and figures |
-| `python/` | ICNN (Moreau-envelope model) training modules used by `experiments/*/train.py` |
+| `python/` | `micnn.py`: ICNN (Moreau-envelope model) training used by every `experiments/*/train.py`; `make_icnn(weight_act, keep_best)` selects each problem's settings |
 | `models/<p>/` | trained ICNNs (`.json` read by Julia, `.pkl` from JAX); `models/legacy/` holds the former `model/` folder |
 | `data/<p>/` | training data (`training/`) and input data (`micro_grid/` for the power grid) |
 | `results/<p>/` | benchmark outputs, tables and figures |
@@ -23,9 +23,9 @@ Every `problems/<p>/` uses the same file names:
 | `jump_solver.jl` | the JuMP/IPOPT baseline |
 | `admm.jl` | the ADMM baseline |
 | `lme_admm.jl` | LME-ADMM and sLME-ADMM |
-| `utils.jl`, `matrix_tools.jl` | ICNN evaluation and its gradient |
+| `utils.jl` | includes `src/icnn.jl`, loads this problem's ICNN, and problem-specific helpers |
 
-`mpc` has no `setup.jl` (its `utils.jl` loads the ICNN); `mvee` also has
+`entr_max` and `mpc` load their ICNN in `utils.jl` (`mpc` has no `setup.jl`); `mvee` also has
 `convex_solver.jl` (a Convex.jl formulation).
 
 Run every script from the repository root (the scripts call `Pkg.activate(".")`
