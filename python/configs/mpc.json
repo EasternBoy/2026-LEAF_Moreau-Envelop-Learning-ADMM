@@ -1,0 +1,22 @@
+{
+  "train_data": "data/mpc/training/mpc-train-rho=10.0.npz",
+  "test_data": "data/mpc/training/mpc-test-rho=10.0.npz",
+  "output": "models/mpc/test",
+  "_note": "trained with the ReLU projection but exported with softplus, as before",
+  "weight_act": "relu",
+  "keep_best": true,
+  "export_act": "softplus",
+  "lower_bound": false,
+  "train": {
+    "widths": [
+      256,
+      256
+    ],
+    "lr": 0.001,
+    "grad_weight": 5.0,
+    "l2_reg": 1e-05,
+    "batch_size": 256,
+    "epochs": 10000,
+    "seed": 0
+  }
+}

@@ -228,7 +228,7 @@ def batch_iterator(arrays, batch_size: int, shuffle_key: jax.Array):
 
 
 # -----------------------------
-# Evaluation and export (used by experiments/*/train.py)
+# Evaluation and export (used by train.py)
 # -----------------------------
 def report_test(icnn: SimpleNamespace, params, Xva, yva, gva) -> None:
     y_pred = icnn.batched_forward(params,    jnp.asarray(Xva))

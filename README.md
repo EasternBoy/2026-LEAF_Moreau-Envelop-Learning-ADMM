@@ -4,8 +4,8 @@
 |---|---|
 | `src/` | the `LMEADMM` package (`src/LMEADMM.jl`; this repository's `Project.toml` is the package, so scripts run with `--project=.` load it with `using LMEADMM`), shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility), `icnn.jl` (the learned Moreau envelope: ICNN, `load_model`, `gradient_struct`, `mini_batch`), `kkt.jl` (the sLME-ADMM v-step: projection onto `{v : M v = b}` through one LDLᵀ-factored KKT system), `solvers.jl` (`solver_model`: JuMP models for Ipopt, MadNLP, OSQP, Gurobi, Clarabel, ECOS, Mosek; `callback_struct`) |
 | `problems/<p>/` | one problem's library code, included by the experiments, never run directly |
-| `experiments/<p>/` | runnable scripts: benchmarks, data generation, ICNN training, tables and figures |
-| `python/` | `micnn.py`: ICNN (Moreau-envelope model) training used by every `experiments/*/train.py`; `make_icnn(weight_act, keep_best)` selects each problem's settings |
+| `experiments/<p>/` | runnable scripts: benchmarks, data generation, tables and figures |
+| `python/` | ICNN (Moreau-envelope model) training: `python python/train.py <p>` trains with the settings in `python/configs/<p>.json` (data, output, `make_icnn` choices, `train_icnn` arguments) using `micnn.py` |
 | `models/<p>/` | trained ICNNs (`.json` read by Julia, `.pkl` from JAX); `models/legacy/` holds the former `model/` folder |
 | `data/<p>/` | training data (`training/`) and input data (`micro_grid/` for the power grid) |
 | `results/<p>/` | benchmark outputs, tables and figures |

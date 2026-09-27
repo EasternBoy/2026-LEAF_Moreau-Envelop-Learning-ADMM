@@ -1,0 +1,22 @@
+{
+  "train_data": "data/mvee/training/logdet-rho=1.0-train-m=50.npz",
+  "test_data": "data/mvee/training/logdet-rho=1.0-test-m=50.npz",
+  "output": "models/mvee/logdet-rho=1.0-m=50_max_ICNN",
+  "weight_act": "softplus",
+  "keep_best": false,
+  "export_act": "softplus",
+  "lower_bound": true,
+  "train": {
+    "widths": [
+      16,
+      16
+    ],
+    "lr": 0.005,
+    "grad_weight": 5,
+    "penalty_weight": 1,
+    "l2_reg": 0,
+    "batch_size": 16,
+    "epochs": 5000,
+    "seed": 0
+  }
+}
