@@ -1,8 +1,7 @@
-> Protocol update: regenerate CP-table artifacts with both scripts (`--force`).
-> All methods share one scoring convention: entropy is evaluated at max(w, 0)
-> (0 log 0 = 0), negative entries count in `max_viol`, and a point is feasible
-> when `max_viol ≤ 1e-4`. IPOPT and sLME rows are
-> oracle-assisted time-to-target measurements, excluding reference-solving cost.
+> Every method saves its raw solutions `W`; all optimality gaps, violations and
+> feasibility flags are computed by `src/metrics.jl` (see *Scoring* below).
+> IPOPT and sLME rows are oracle-assisted time-to-target measurements,
+> excluding reference-solving cost.
 
 # Cone-program benchmark data (maximum-entropy problem)
 
@@ -15,14 +14,18 @@ the solving-time / optimality-gap table for
 Run from the repository root:
 
 ```bash
-julia --project=. script/entropy_max/entr_max_table.jl    # IPOPT and sLME-ADMM columns
-python script/entropy_max/entr_max_table.py               # DC3 column (DC3/.venv, see DC3/README.md)
+julia --project=. script/entropy_max/entr_max_table.jl      # IPOPT and sLME-ADMM columns
+python script/entropy_max/entr_max_table.py                 # DC3 + correction column (DC3/.venv, see DC3/README.md)
+julia --project=. script/entropy_max/entr_max_evaluate.jl   # re-score every saved W (no solving)
 ```
 
-Both scripts read the data in this folder and only compute what is missing.
-Either one rewrites `entr_max_table.md` from all the data present, so the table is
-complete after both have run.  `--force` recomputes a script's data;
-`entr_max_table.py --retrain` also retrains the DC3 networks.
+Both table scripts read the data in this folder and only compute what is missing.
+`entr_max_table.jl` renders `entr_max_table.md` from all the data present;
+`entr_max_table.py` calls it at the end, so the table is complete after both
+have run.  `--force` recomputes a script's data; `entr_max_table.py --retrain`
+also retrains the DC3 networks.  After changing a rule in `src/metrics.jl`, bump
+`METRICS_VERSION` there (and in `entr_max_table.py`) and run
+`entr_max_evaluate.jl`: every method is re-scored from its saved solutions.
 
 `entr_max_table.jl` handles each (n, m) in a separate Julia process started with
 `--threads=auto`, because `n` is a `const` in
@@ -34,15 +37,27 @@ complete after both have run.  `--force` recomputes a script's data;
   `data_opt(n, m)`: `A ~ U(0,1)^{m×n}`, `bᵢ = Σⱼ Aᵢⱼ / (1.06 n)`.  The Julia RNG
   is seeded with `Random.seed!(20260923)`.  All three methods see the same
   instances.
-* **Ground truth:** `J_opt` is Ipopt with `tol = 1e-8`.  Every optimality gap is
-  `g = 100 |J − J_opt| / |J_opt|` (in %), where `J = Σ wᵢ log wᵢ` is evaluated
-  on the point the method returns.
+* **Ground truth:** `J_opt` is Ipopt with `tol = 1e-8`.
+
+## Scoring
+
+One set of rules for all three methods, in `src/metrics.jl`:
+
+* **Optimality gap:** `g = 100 |J − J_opt| / |J_opt|` (in %), with
+  `J = Σ max(wᵢ, 0) log max(wᵢ, 0)` (0 log 0 = 0) on the returned point.
+* **Constraint violation:** `max_viol = max(max(A w − b), max(−w), |1ᵀw − 1|, 0)`,
+  so a negative entry is counted here rather than making the gap undefined.
+* **Feasible:** `g` is finite and `max_viol ≤ FEAS_TOL = 1e-4`.
+
+IPOPT and sLME-ADMM are scored in `entr_max_table.jl` right after solving;
+DC3 + correction is scored by `entr_max_evaluate.jl`.  Both call
+`score_entr_max` from `src/metrics.jl`.
 
 ## Methods and stopping rules
 
 | method | stops when | solving time |
 |---|---|---|
-| IPOPT | `Ipopt_callback_BM`: the gap of the current iterate is below `g_opt` **and** Ipopt's primal infeasibility `inf_pr < FEAS_TOL·scale` with `FEAS_TOL = 1e-5` (a violation below 1e-5 in `w`; `ipopt_feas_tol` in `preprocess.jl`, default 1e-4, set by `entr_max_table.jl`); Ipopt `tol` 1e-4 otherwise | `JuMP.solve_time` |
+| IPOPT | `Ipopt_callback_BM`: the gap of the current iterate is below `g_opt` **and** Ipopt's primal infeasibility `inf_pr < IPOPT_FEAS_TOL·scale` with `IPOPT_FEAS_TOL = 1e-5` (a violation below 1e-5 in `w`; `ipopt_feas_tol` in `preprocess.jl`, default 1e-4, set by `entr_max_table.jl`); Ipopt `tol` 1e-4 otherwise | `JuMP.solve_time` |
 | sLME-ADMM | `sLME_ADMM_callback`: gap < `g_opt` **and** ADMM residual `max(‖w−v‖∞, ‖v−z‖∞) < tol = SLME_TOL·scale` with `SLME_TOL = 1e-5` (the residual is in `x = scale·w`, so this bounds it by 1e-5 in `w`: tol = 2e-3 at n = 100, 2e-2 at n = 1000), or 1000 iterations.  The gap is computed on the `n` decision variables only (the iterate is `[x; s]` with `m` slacks; including the slacks biased the gap and left some runs at the cap) | wall time of `sLME_ADMM`, including the LDLᵀ factorisation |
 | DC3 + correction | a single forward pass; correction runs until the violation is ≤ `corr_eps = 1e-4` or the step cap is hit | wall time of `DC3Solver.solve` for one instance (batch = 1): predict + complete + correct |
 
@@ -76,11 +91,11 @@ instance file).  Time is in ms, gap in %.
 |---|---|
 | `instances/instances-n={n}-m={m}.npz` | `A` (1000, m, n), `b` (1000, m).  Git-ignored (up to 800 MB); regenerated deterministically by `entr_max_table.jl` |
 | `ground_truth-n={n}-m={m}.npz` | `J_opt`, `time_ms` (Ipopt, tol 1e-8), `seed` |
-| `IPOPT-gopt={1,0.1}-n={n}-m={m}.npz` | `time_ms`, `gap_pct`, `max_viol`, `iterations` (unused, 0) |
-| `sLME-ADMM-gopt={1,0.1}-n={n}-m={m}.npz` | `time_ms`, `gap_pct`, `max_viol`, `iterations` |
-| `DC3-n={n}-m={m}.npz` | `time_ms`, `gap_pct`, `max_viol`, `feasible`, `corr_steps` |
+| `IPOPT-gopt={1,0.1}-n={n}-m={m}.npz` | `W` (1000, n), `time_ms`, `iterations` (unused, 0), + scores |
+| `sLME-ADMM-gopt={1,0.1}-n={n}-m={m}.npz` | `W` (1000, n), `time_ms`, `iterations`, + scores |
+| `DC3-n={n}-m={m}.npz` | `W` (1000, n), `time_ms`, `corr_steps`, `dc3_version`, + scores |
 | `entr_max_table.md` | the rendered table |
 
-`max_viol = max(max(A w − b), max(−w), |1ᵀw − 1|, 0)`.  For DC3 it is the
-largest of the equality residual, the inequality violation and the
-objective-domain violation `max(−w)`.
+The scores written by `src/metrics.jl` are `gap_pct`, `max_viol`, `feasible` and
+`metrics_version`.  A file whose `metrics_version` differs from `src/metrics.jl`
+shows as *rerun required* in the table.

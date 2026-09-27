@@ -6,8 +6,7 @@ include(joinpath(@__DIR__, "entr_max_table.jl"))   # helpers only (not a worker,
 
 function run_row(nn, mm)
     need = [gt_file(nn, mm); [res_file(me, g, nn, mm) for me in METHODS for (_, g) in GOPTS]]
-    current = all(f -> isfile(f) && get(npzread(f), "metrics_version", 0) == 2, need[2:end])
-    (FORCE || !isfile(need[1]) || !current) || return
+    (FORCE || !isfile(need[1]) || !all(is_current, need[2:end])) || return
     cmd = `$(Base.julia_cmd()) --project=$REPO --threads=auto $(joinpath(@__DIR__, "entr_max_table.jl")) worker $nn $mm`
     FORCE && (cmd = `$cmd --force`)
     run(cmd)
@@ -33,7 +32,7 @@ function render_row(nn, mm)
     dc = "—"
     if isfile(dc3_file(nn, mm))
         d = npzread(dc3_file(nn, mm))
-        dc = get(d, "metrics_version", 0) >= 2 ? fmt_gap(d["gap_pct"]) : "rerun required"
+        dc = is_current(dc3_file(nn, mm)) ? fmt_gap(d["gap_pct"]) : "rerun required"
         f = mean(d["feasible"] .> 0.5)
         f < 1 && (dc *= @sprintf(", feasible %.0f%%", 100f))
     end

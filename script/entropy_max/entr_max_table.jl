@@ -16,14 +16,16 @@ const GOPTS    = [(1.0, "1"), (0.1, "0.1")]      # g_opt in %, and its spelling 
 const METHODS  = ["IPOPT", "sLME-ADMM"]
 const N_SAMPLES = 1000
 const SEED      = 20260923
-const FEAS_TOL  = 1e-5       # IPOPT early stop: violation below FEAS_TOL (inf_pr < FEAS_TOL*scale)
-const REPORT_TOL = 1e-4      # threshold for the feasible rate printed in the log
+const IPOPT_FEAS_TOL = 1e-5  # IPOPT early stop: violation below IPOPT_FEAS_TOL (inf_pr < IPOPT_FEAS_TOL*scale)
 const SLME_TOL  = 1e-5       # sLME-ADMM residual tolerance on w: tol = SLME_TOL*scale
 
 inst_file(n, m)           = joinpath(INST_DIR, "instances-n=$(n)-m=$(m).npz")
 gt_file(n, m)             = joinpath(OUT, "ground_truth-n=$(n)-m=$(m).npz")
 res_file(meth, g, n, m)   = joinpath(OUT, "$(meth)-gopt=$(g)-n=$(n)-m=$(m).npz")
 dc3_file(n, m)            = joinpath(OUT, "DC3-n=$(n)-m=$(m).npz")
+
+include(joinpath(REPO, "src", "metrics.jl"))     # gap, violation, feasibility for every method
+is_current(path) = isfile(path) && get(npzread(path), "metrics_version", 0) == METRICS_VERSION
 
 const IS_WORKER = length(ARGS) >= 3 && ARGS[1] == "worker"
 const FORCE     = "--force" in ARGS
@@ -43,12 +45,7 @@ IS_WORKER && include(joinpath(REPO, "examples", "entr_max", "maxEntropy.jl"))
 IS_WORKER && include(joinpath(REPO, "examples", "entr_max", "preprocess.jl"))
 IS_WORKER && include(joinpath(REPO, "examples", "entr_max", "JuMPsolver.jl"))
 IS_WORKER && include(joinpath(REPO, "examples", "entr_max", "LME-ADMM.jl"))
-IS_WORKER && (ipopt_feas_tol = FEAS_TOL)
-
-# One convention for every method (entr_max_table.py scores DC3 + correction the same way):
-# entropy is scored at max(w, 0), with 0 log 0 = 0, and any −w is counted in max_violation.
-entropy(w) = all(isfinite, w) ? sum(x -> x <= 0 ? 0.0 : x * log(x), w) : NaN
-max_violation(A, b, w) = max(maximum(A * w .- b), maximum(-w), abs(sum(w) - 1), 0.0)
+IS_WORKER && (ipopt_feas_tol = IPOPT_FEAS_TOL)
 
 function instances()
     path = inst_file(n, m)
@@ -98,24 +95,23 @@ end
 
 function run_method(meth, gopt, gname, A, b, Jopt, mgrad)
     path = res_file(meth, gname, n, m)
-    (isfile(path) && !FORCE && get(npzread(path), "metrics_version", 0) == 2) && return
+    (is_current(path) && !FORCE) && return
     global max_opt_gap = gopt
     global J_opt = Jopt[1]
     solve_one(meth, instance(A, b, 1), mgrad)                # compile, not recorded
-    t_ms = zeros(N_SAMPLES); gap = zeros(N_SAMPLES); viol = zeros(N_SAMPLES); iters = zeros(Int, N_SAMPLES); domain_valid = falses(N_SAMPLES)
+    t_ms = zeros(N_SAMPLES); W = zeros(N_SAMPLES, n); iters = zeros(Int, N_SAMPLES)
     for k in 1:N_SAMPLES
         global J_opt = Jopt[k]
-        para = instance(A, b, k)
-        w, t, iters[k] = solve_one(meth, para, mgrad)
-        domain_valid[k] = all(isfinite, w) && all(>=(0), w)
+        w, t, iters[k] = solve_one(meth, instance(A, b, k), mgrad)
+        W[k, :] = w
         t_ms[k] = 1e3t
-        gap[k]  = 100abs(entropy(w) - Jopt[k]) / abs(Jopt[k])
-        viol[k] = max_violation(para.A, para.b, w)
         k % 5 == 0 && GC.gc()
     end
-    npzwrite(path, Dict("time_ms" => t_ms, "gap_pct" => gap, "max_viol" => viol, "iterations" => iters, "domain_valid" => domain_valid, "feasible" => isfinite.(gap) .& (viol .<= REPORT_TOL), "metrics_version" => 2, "oracle_assisted" => true))
+    s = score_entr_max(A, b, W, Jopt)
+    npzwrite(path, Dict("W" => W, "time_ms" => t_ms, "iterations" => iters, "gap_pct" => s.gap_pct, "max_viol" => s.max_viol,
+                        "feasible" => s.feasible, "metrics_version" => METRICS_VERSION, "oracle_assisted" => true))
     @printf("n=%d m=%d %-9s g_opt=%s%%: time %.3f (%.3f) ms, gap %.3g (%.3g) %%, feasible %.3f\n",
-            n, m, meth, gname, mean(t_ms), maximum(t_ms), mean(gap), maximum(gap), mean(isfinite.(gap) .& (viol .<= REPORT_TOL)))
+            n, m, meth, gname, mean(t_ms), maximum(t_ms), mean(s.gap_pct), maximum(s.gap_pct), mean(s.feasible))
 end
 
 function worker()
@@ -133,9 +129,7 @@ end
 function run_missing()
     for (nn, mm) in SIZES
         need = [gt_file(nn, mm); [res_file(me, g, nn, mm) for me in METHODS for (_, g) in GOPTS]]
-        result_files = need[2:end]
-        current = all(f -> isfile(f) && get(npzread(f), "metrics_version", 0) == 2, result_files)
-        (FORCE || !all(isfile, need) || !current) || continue
+        (FORCE || !isfile(need[1]) || !all(is_current, need[2:end])) || continue
         cmd = `$(Base.julia_cmd()) --project=$REPO --threads=auto $(@__FILE__) worker $nn $mm`
         FORCE && (cmd = `$cmd --force`)
         run(cmd)
@@ -149,7 +143,7 @@ fmt_viol(x) = @sprintf("%.1e (%.1e)", mean(x), maximum(x))
 function dc3_cell(nn, mm, gopt)
     isfile(dc3_file(nn, mm)) || return "—", Inf
     d = npzread(dc3_file(nn, mm))
-    get(d, "metrics_version", 0) >= 2 || return "rerun required", Inf
+    is_current(dc3_file(nn, mm)) || return "rerun required", Inf
     ok = all(d["feasible"] .> 0.5) && maximum(d["gap_pct"]) <= gopt
     return ok ? (fmt_time(d["time_ms"]), mean(d["time_ms"])) : ("unable to achieve", Inf)
 end
@@ -157,7 +151,7 @@ end
 function time_cell(meth, gname, nn, mm)
     isfile(res_file(meth, gname, nn, mm)) || return "—", Inf
     d = npzread(res_file(meth, gname, nn, mm))
-    get(d, "metrics_version", 0) == 2 || return "rerun required", Inf
+    is_current(res_file(meth, gname, nn, mm)) || return "rerun required", Inf
     (all(d["feasible"] .> 0.5) && all(d["gap_pct"] .<= parse(Float64, gname))) || return "unable to achieve", Inf
     t = d["time_ms"]
     return fmt_time(t), mean(t)
@@ -168,10 +162,7 @@ function iter_suffix(gname, nn, mm)
     return @sprintf(" [%.1f it.]", mean(npzread(res_file("sLME-ADMM", gname, nn, mm))["iterations"]))
 end
 
-function metric_cell(path, key, formatter)
-    d = npzread(path)
-    return get(d, "metrics_version", 0) >= 2 ? formatter(d[key]) : "rerun required"
-end
+metric_cell(path, key, formatter) = is_current(path) ? formatter(npzread(path)[key]) : "rerun required"
 
 function render()
     rows = String[]
@@ -188,7 +179,7 @@ function render()
         dc = "—"
         if isfile(dc3_file(nn, mm))
             d = npzread(dc3_file(nn, mm))
-            dc = get(d, "metrics_version", 0) >= 2 ? fmt_gap(d["gap_pct"]) : "rerun required"
+            dc = is_current(dc3_file(nn, mm)) ? fmt_gap(d["gap_pct"]) : "rerun required"
             f = mean(d["feasible"] .> 0.5)
             f < 1 && (dc *= @sprintf(", feasible %.0f%%", 100f))
         end
@@ -212,7 +203,8 @@ function render()
     (IPOPT and sLME-ADMM from the run with that g_opt; DC3 has a single run).
     IPOPT and sLME-ADMM use oracle-assisted stopping against the known optimum;
     reference-solve cost is excluded. Every method's entropy is scored at max(w, 0);
-    negative entries count in Constr. viol., and a point is feasible when that is ≤ 1e-4.
+    negative entries count in Constr. viol., and a point is feasible when that is ≤ $(FEAS_TOL).
+    All three methods are scored by `src/metrics.jl` from their saved solutions.
 
     |  | n | m | IPOPT mean (max) | sLME-ADMM mean (max) | DC3 + correction mean (max) |
     |---|---|---|---|---|---|
