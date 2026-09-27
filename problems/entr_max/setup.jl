@@ -21,6 +21,7 @@ function Ipopt_callback_BM(
    alpha_du::Float64,
    alpha_pr::Float64,
    ls_trials::Cint,
+   scale,
 )
     rel_opt_gap = 100abs((J_opt - obj_value/scale)/J_opt)
     # also require primal feasibility: inf_pr is the constraint violation in x = scale*w,
@@ -112,7 +113,8 @@ function Ipopt_callback_iter(
 end
 
 # Ipopt stops on Ipopt_callback_BM for benchmark solves (tol ≥ 1e-3), records with Ipopt_callback_iter otherwise
-pick_solver(name, tol::FloatType = 1e-6, cbs::Union{Nothing, callback_struct} = nothing) =
-    solver_model(name, tol; early_stop = Ipopt_callback_BM,
+# (it needs the problem's variable scale, see var_scale)
+pick_solver(name, tol::FloatType = 1e-6, cbs::Union{Nothing, callback_struct} = nothing; scale = nothing) =
+    solver_model(name, tol; early_stop = scale === nothing ? nothing : (args...) -> Ipopt_callback_BM(args..., scale),
                  record = cbs === nothing ? nothing : (args...) -> Ipopt_callback_iter(args..., cbs))
   

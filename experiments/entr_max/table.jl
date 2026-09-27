@@ -89,7 +89,7 @@ function solve_one(meth, para, mgrad)
     end
     it = Ref(0)
     sol, t, _ = sLME_ADMM(para, mgrad, (args...) -> (it[] = args[6]; sLME_ADMM_callback(args...));
-                          tol = SLME_TOL * scale)
+                          tol = SLME_TOL * var_scale(para))
     return sol[1:n], t, it[]
 end
 

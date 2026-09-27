@@ -149,6 +149,7 @@ function ADMM_eco_iter_data(para_opt::data_opt, prime_sol_name::String; max_iter
 
     ρ  = para_opt.rho
     n  = para_opt.n
+    scale = var_scale(para_opt)
 
     prime_sol   = prime_solver_eco_data(prime_sol_name, para_opt)
     aux_sol     = aux_solver_eco_data(para_opt)
@@ -213,6 +214,7 @@ function prime_solver_eco_data(name, para_opt)
 
     ρ         = para_opt.rho
     cost_func = para_opt.cost_func
+    scale     = var_scale(para_opt)
 
     @variable(model, query in MOI.Parameter(0))
     @variable(model, x >= 1e-9)
@@ -235,6 +237,7 @@ function aux_solver_eco_data(para_opt)
 
     n = para_opt.n
     m = para_opt.m
+    scale = var_scale(para_opt)
 
     @variable(model,   x[1:n] .>= 1e-8)
     @variable(model,   query[1:n]  in  MOI.Parameter.(zeros(n)))
@@ -264,7 +267,7 @@ end
 
 
 
-function prox_operator(ρ::FloatType)
+function prox_operator(ρ::FloatType, scale)
     model = Model(Ipopt.Optimizer)
     set_silent(model)
 
@@ -286,7 +289,7 @@ end
 function data_gen!(range_q, data_collect::Dict)
 
     data = data_opt()
-    prox = prox_operator(data.rho)
+    prox = prox_operator(data.rho, var_scale(data))
 
     @simd for q in range_q
         prox_val, ME = prox(q)

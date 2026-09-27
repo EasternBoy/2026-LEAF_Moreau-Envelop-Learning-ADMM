@@ -5,6 +5,7 @@ function aux_solver_gen(solver_name::String, para_opt::data_opt)
     model = pick_solver(solver_name)
 
     n = para_opt.n
+    scale = var_scale(para_opt)
     @variable(model,   x[1:n]      .>= 1e-9)
     @variable(model,   query[1:n]  in MOI.Parameter.(zeros(n)))
     @constraint(model, sum(x) == scale)
@@ -29,12 +30,13 @@ end
 function LME_ADMM(data::data_opt, gradient::gradient_struct, aux_sol::Function)
 
     n      = data.n
+    scale  = var_scale(data)
     z      = zeros(FloatType, n)
     w      = zeros(FloatType, n)
     α      = zeros(FloatType, n)
     buffer = zeros(FloatType, n)
 
-    n_mb = div(n-1, s_mb) + 1
+    n_mb = div(n-1, vector_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
 
@@ -103,6 +105,7 @@ end
     n = data.n
     m = data.m
     ρ = data.rho
+    scale = var_scale(data)
 
     z       = zeros(FloatType, n+m)
     w       = copy(z)
@@ -112,7 +115,7 @@ end
     buffer1 = copy(z)
     buffer2 = copy(z)
 
-    n_mb = div(n-1, s_mb) + 1
+    n_mb = div(n-1, vector_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
     # equality constraints on [x; s]:  A x + s = scale·b,  1ᵀx = scale

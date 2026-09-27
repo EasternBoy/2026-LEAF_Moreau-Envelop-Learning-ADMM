@@ -1,5 +1,6 @@
 function JuMP_solver(name, para_opt, tol, cbs::Union{Nothing, callback_struct} = nothing, init_val::Union{Matrix{FloatType}, Nothing} = nothing; verbose::Bool = false)
-    model = pick_solver(name, tol, cbs)
+    scale = var_scale(para_opt)
+    model = pick_solver(name, tol, cbs; scale = scale)
     n = para_opt.n
     m = para_opt.m
 

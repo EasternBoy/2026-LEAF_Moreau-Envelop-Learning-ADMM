@@ -14,12 +14,12 @@ end
 
 function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Function)
 
-    z      = zeros(FloatType, dim, N)
-    w      = zeros(FloatType, dim, N)
-    α      = zeros(FloatType, dim, N)
-    buffer = zeros(FloatType, dim, N)
+    z      = zeros(FloatType, data.dim, data.N)
+    w      = zeros(FloatType, data.dim, data.N)
+    α      = zeros(FloatType, data.dim, data.N)
+    buffer = zeros(FloatType, data.dim, data.N)
 
-    n_mb = div(N-1, s_mb) + 1
+    n_mb = div(data.N-1, column_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
 
@@ -93,7 +93,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
     buffer1 = copy(z)
     buffer2 = copy(buffer1)
 
-    n_mb = div(N - 1, s_mb) + 1
+    n_mb = div(data.N - 1, column_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb)
 
 

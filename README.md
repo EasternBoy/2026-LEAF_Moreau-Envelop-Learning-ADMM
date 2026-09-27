@@ -40,8 +40,8 @@ experiments/entr_max/table.py.
   julia --project=. experiments/entr_max/table.jl            # use stored data, run what is missing
   julia --project=. experiments/entr_max/table.jl --force    # recompute everything
 
-Internal mode (one (n, m) per process, because `n` is a `const` in
-problems/entr_max/problem.jl):
+Internal mode (one (n, m) per process, so that the timings of different sizes do
+not share a Julia session; the problem code itself takes n and m from `data_opt`):
 
   julia --project=. --threads=auto experiments/entr_max/table.jl worker n m [--instances-only] [--force]
 

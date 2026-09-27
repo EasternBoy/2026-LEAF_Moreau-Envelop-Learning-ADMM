@@ -177,13 +177,19 @@ function (obj::gradient_struct)(x::AbstractVecOrMat{FloatType})
 end
 
 # ---------------------------------------------------------------------------
+# Chunk size a gradient was built for: its input length for a vector input
+# (gradient_struct(model, s_mb, 1) or (model, 1, s_mb)), its number of columns
+# for a matrix input (gradient_struct(model, s_mb, dim)).
+vector_chunk(g::gradient_struct) = length(g.grad_x_buf)
+column_chunk(g::gradient_struct) = size(g.grad_x_buf, 2)
+
 # Evaluate the gradient on a long input in chunks, one chunk per thread.  Each
 # chunk has the size the gradients were built for; the last one is aligned to
 # the end of the input (it may overlap the previous chunk).
 
 # Chunks of a vector: `local_gradients` built with `gradient_struct(model, s_mb, 1)` or `(model, 1, s_mb)`.
 @inbounds function mini_batch(local_gradients::NTuple, batch::Vector{FloatType})
-    s_mb      = length(local_gradients[1].grad_x_buf)
+    s_mb      = vector_chunk(local_gradients[1])
     data_size = length(batch)
     n_mb      = div(data_size - 1, s_mb) + 1
     out       = copy(batch)
@@ -196,7 +202,7 @@ end
 
 # Column chunks of a matrix: `local_gradients` built with `gradient_struct(model, s_mb, dim)`.
 @inbounds function mini_batch(local_gradients::NTuple, batch::AbstractMatrix)
-    s_mb      = size(local_gradients[1].grad_x_buf, 2)
+    s_mb      = column_chunk(local_gradients[1])
     data_size = size(batch, 2)
     n_mb      = div(data_size - 1, s_mb) + 1
     out       = copy(batch)

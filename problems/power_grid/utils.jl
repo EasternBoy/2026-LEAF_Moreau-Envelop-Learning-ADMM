@@ -9,6 +9,7 @@ function dynamics_projection(mpc_data::MPCData_eco)
     A = mpc_data.A
     B = mpc_data.B
     N = mpc_data.N
+    dim = mpc_data.dim
 
     IN = Matrix{FloatType}(I, N, N)
 

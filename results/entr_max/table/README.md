@@ -28,8 +28,9 @@ also retrains the DC3 networks.  After changing a rule in `src/metrics.jl`, bump
 `evaluate.jl`: every method is re-scored from its saved solutions.
 
 `table.jl` handles each (n, m) in a separate Julia process started with
-`--threads=auto`, because `n` is a `const` in
-`problems/entr_max/problem.jl`.
+`--threads=auto`, so that the timings of different sizes do not share a Julia
+session (the problem code takes n and m from `data_opt`; the variable scale
+`2n` is `var_scale(data)`).
 
 ## Instances and ground truth
 

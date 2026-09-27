@@ -67,7 +67,7 @@ function LME_ADMM_mpc(para_opt::MPCData, gradient::gradient_struct, aux_sol::Fun
     α      = zeros(FloatType, n)
     buffer = zeros(FloatType, n)
 
-    n_mb = div(n-1, s_mb) + 1
+    n_mb = div(n-1, vector_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
     let ρ = para_opt.rho
@@ -167,7 +167,7 @@ end
     proj = AffineProjection(kkt_matrix(M; δ = 1e-10), g)
 
     # ── Mini-batch gradient setup ──
-    n_mb            = div(n - 1, s_mb) + 1
+    n_mb            = div(n - 1, vector_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
     # ── Preallocate ──

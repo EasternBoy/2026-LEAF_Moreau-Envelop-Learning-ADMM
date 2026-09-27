@@ -151,7 +151,7 @@ function aux_solver_eco(solver_name::String, mpc_para::MPCData_eco)
     model = pick_solver(solver_name)
 
     N    = mpc_para.N
-    dim  = mpc_data.dim
+    dim  = mpc_para.dim
     BESS = mpc_para.BESS
     dT   = mpc_para.dT
 
@@ -211,8 +211,9 @@ end
 # ==========================================
 function ADMM_eco_iter_data(mpc_para::MPCData_eco, prime_sol::Function, aux_sol::Function; max_iter = 1000, tol = tol)
 
-    N  = mpc_para.N
-    ρ  = mpc_para.rho
+    N   = mpc_para.N
+    dim = mpc_para.dim
+    ρ   = mpc_para.rho
 
     function solver(data, init = mpc_para.x0, load_fc = mpc_para.load_forecast[1:N], gen_fc = mpc_para.gen_forecast[1:N]; verbose = false)
 

@@ -10,7 +10,8 @@ using Distributions
 
 import MathOptInterface as MOI
 
-const scale::Int = 2n
+# The solvers work in x = var_scale(data)·w, so that 1ᵀx = 2n instead of 1ᵀw = 1.
+var_scale(data) = 2data.n
 
 if !(@isdefined(GUROBI_ENV))
     GUROBI_ENV = Gurobi.Env() 

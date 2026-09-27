@@ -13,6 +13,7 @@ function Clarabel_solve(data::data_opt)
 
     m, n = data.m, data.n
     A, b = data.A, data.b
+    scale = var_scale(data)
 
     model = Model(Clarabel.Optimizer)
     set_silent(model)
