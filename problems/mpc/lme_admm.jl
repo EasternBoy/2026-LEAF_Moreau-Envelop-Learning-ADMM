@@ -1,5 +1,5 @@
 using LDLFactorizations
-include(joinpath(@__DIR__, "..", "..", "src", "kkt.jl"))     # kkt_matrix, AffineProjection (the v-step)
+using LMEADMM   # src/LMEADMM.jl
 using Base.Threads
 
 

@@ -2,7 +2,7 @@
 
 | folder | contents |
 |---|---|
-| `src/` | code shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility), `icnn.jl` (the learned Moreau envelope: ICNN, `load_model`, `gradient_struct`, `mini_batch`), `kkt.jl` (the sLME-ADMM v-step: projection onto `{v : M v = b}` through one LDLᵀ-factored KKT system), `solvers.jl` (`solver_model`: JuMP models for Ipopt, MadNLP, OSQP, Gurobi, Clarabel, ECOS, Mosek; `callback_struct`) |
+| `src/` | the `LMEADMM` package (`src/LMEADMM.jl`; this repository's `Project.toml` is the package, so scripts run with `--project=.` load it with `using LMEADMM`), shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility), `icnn.jl` (the learned Moreau envelope: ICNN, `load_model`, `gradient_struct`, `mini_batch`), `kkt.jl` (the sLME-ADMM v-step: projection onto `{v : M v = b}` through one LDLᵀ-factored KKT system), `solvers.jl` (`solver_model`: JuMP models for Ipopt, MadNLP, OSQP, Gurobi, Clarabel, ECOS, Mosek; `callback_struct`) |
 | `problems/<p>/` | one problem's library code, included by the experiments, never run directly |
 | `experiments/<p>/` | runnable scripts: benchmarks, data generation, ICNN training, tables and figures |
 | `python/` | `micnn.py`: ICNN (Moreau-envelope model) training used by every `experiments/*/train.py`; `make_icnn(weight_act, keep_best)` selects each problem's settings |
@@ -23,7 +23,7 @@ Every `problems/<p>/` uses the same file names:
 | `jump_solver.jl` | the JuMP/IPOPT baseline |
 | `admm.jl` | the ADMM baseline |
 | `lme_admm.jl` | LME-ADMM and sLME-ADMM (each problem keeps its own loop: the variants differ in their updates and stopping rules) |
-| `utils.jl` | includes `src/icnn.jl`, loads this problem's ICNN, and problem-specific helpers |
+| `utils.jl` | `using LMEADMM`, loads this problem's ICNN, and problem-specific helpers |
 
 `entr_max` and `mpc` load their ICNN in `utils.jl` (`mpc` has no `setup.jl`); `mvee` also has
 `convex_solver.jl` (a Convex.jl formulation).

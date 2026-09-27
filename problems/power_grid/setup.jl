@@ -1,5 +1,5 @@
 include("utils.jl")
-include(joinpath(@__DIR__, "..", "..", "src", "solvers.jl"))  # callback_struct, solver_model
+using LMEADMM   # src/LMEADMM.jl
 
 if !(@isdefined(GUROBI_ENV))
     GUROBI_ENV = Gurobi.Env() 
@@ -127,7 +127,7 @@ end
 
 # as entr_max, with Ipopt's and MadNLP's NLP scaling off
 pick_solver(name, tol::FloatType = 1e-6, cbs::Union{Nothing, callback_struct} = nothing) =
-    solver_model(name, tol; early_stop = Ipopt_callback_BM,
+    solver_model(name, tol; solvers = @__MODULE__, early_stop = Ipopt_callback_BM,
                  record = cbs === nothing ? nothing : (args...) -> Ipopt_callback_iter(args..., cbs),
                  scaling = false, madnlp_print_level = 5)
   

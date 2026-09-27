@@ -1,5 +1,5 @@
 using LDLFactorizations
-include(joinpath(@__DIR__, "..", "..", "src", "kkt.jl"))     # kkt_matrix, AffineProjection (the v-step)
+using LMEADMM   # src/LMEADMM.jl
 
 function aux_solver_gen(solver_name::String, para_opt::data_opt)
     model = pick_solver(solver_name)

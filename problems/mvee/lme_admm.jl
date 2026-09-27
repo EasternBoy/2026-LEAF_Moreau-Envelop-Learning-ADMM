@@ -1,4 +1,4 @@
-include(joinpath(@__DIR__, "..", "..", "src", "kkt.jl"))     # kkt_matrix, AffineProjection (the v-step)
+using LMEADMM   # src/LMEADMM.jl
 @inbounds function sLME_ADMM(data::data_opt, gradient::gradient_struct, callback::Union{Function, Nothing} =  nothing; 
     tol::FloatType = 1e-3, max_iter::Int = 1000, verbose::Bool = false)    
     

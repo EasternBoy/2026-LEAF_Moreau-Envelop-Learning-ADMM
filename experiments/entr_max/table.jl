@@ -24,7 +24,7 @@ gt_file(n, m)             = joinpath(OUT, "ground_truth-n=$(n)-m=$(m).npz")
 res_file(meth, g, n, m)   = joinpath(OUT, "$(meth)-gopt=$(g)-n=$(n)-m=$(m).npz")
 dc3_file(n, m)            = joinpath(OUT, "DC3-n=$(n)-m=$(m).npz")
 
-include(joinpath(REPO, "src", "metrics.jl"))     # gap, violation, feasibility for every method
+using LMEADMM   # src/metrics.jl: gap, violation, feasibility for every method
 is_current(path) = isfile(path) && get(npzread(path), "metrics_version", 0) == METRICS_VERSION
 
 const IS_WORKER = length(ARGS) >= 3 && ARGS[1] == "worker"

@@ -1,3 +1,7 @@
+name = "LMEADMM"
+uuid = "30a8112c-df58-46fa-881f-5e12d2421c27"
+version = "0.1.0"
+
 [deps]
 AcceleratedKernels = "6a4ca0a5-0e36-4168-a932-d9be78d558f1"
 AppleAccelerate = "13e28ba4-7ad8-5781-acae-3021b1ed3924"

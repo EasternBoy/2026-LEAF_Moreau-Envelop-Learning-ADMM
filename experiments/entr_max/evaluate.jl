@@ -10,7 +10,7 @@ using NPZ, Printf, Statistics
 
 const REPO = abspath(joinpath(@__DIR__, "..", ".."))
 const OUT  = joinpath(REPO, "results", "entr_max", "table")
-include(joinpath(REPO, "src", "metrics.jl"))
+using LMEADMM   # src/metrics.jl: gap, violation, feasibility for every method
 
 const SIZES = [(100, 1), (100, 10), (1000, 10), (1000, 100)]
 const RESULT_PREFIXES = ["IPOPT-gopt=1", "IPOPT-gopt=0.1", "sLME-ADMM-gopt=1", "sLME-ADMM-gopt=0.1", "DC3"]

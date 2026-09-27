@@ -2,7 +2,7 @@
 #   v = argmin ‖v − q‖²  s.t.  M v = b,
 # from the KKT system  [I  Mᵀ; M  −δI] [v; λ] = [q; b],  LDLᵀ-factored once.
 # Shared by entr_max, mpc and mvee (power_grid projects in a weighted norm, see its utils.jl).
-# The caller loads SparseArrays, LinearAlgebra and LDLFactorizations and defines FloatType.
+# Part of the LMEADMM module (src/LMEADMM.jl).
 #
 #   K = kkt_matrix(M)                 # before the timer, as each problem did
 #   P = AffineProjection(K, b)        # factorization: inside or outside the timer, as before

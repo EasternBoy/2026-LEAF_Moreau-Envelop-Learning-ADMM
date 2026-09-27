@@ -1,5 +1,5 @@
 include("utils.jl")
-include(joinpath(@__DIR__, "..", "..", "src", "solvers.jl"))  # callback_struct, solver_model
+using LMEADMM   # src/LMEADMM.jl
 
 if !(@isdefined(GUROBI_ENV))
     GUROBI_ENV = Gurobi.Env() 
@@ -115,6 +115,6 @@ end
 # Ipopt stops on Ipopt_callback_BM for benchmark solves (tol ≥ 1e-3), records with Ipopt_callback_iter otherwise
 # (it needs the problem's variable scale, see var_scale)
 pick_solver(name, tol::FloatType = 1e-6, cbs::Union{Nothing, callback_struct} = nothing; scale = nothing) =
-    solver_model(name, tol; early_stop = scale === nothing ? nothing : (args...) -> Ipopt_callback_BM(args..., scale),
+    solver_model(name, tol; solvers = @__MODULE__, early_stop = scale === nothing ? nothing : (args...) -> Ipopt_callback_BM(args..., scale),
                  record = cbs === nothing ? nothing : (args...) -> Ipopt_callback_iter(args..., cbs))
   

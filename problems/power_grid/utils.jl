@@ -1,4 +1,4 @@
-include(joinpath(@__DIR__, "..", "..", "src", "icnn.jl"))    # ICNN, load_model, gradient_struct, mini_batch
+using LMEADMM   # src/LMEADMM.jl
 
 
 function dynamics_projection(mpc_data::MPCData_eco)

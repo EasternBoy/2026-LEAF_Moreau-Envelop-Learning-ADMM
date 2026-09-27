@@ -1,5 +1,5 @@
 include("utils.jl")
-include(joinpath(@__DIR__, "..", "..", "src", "solvers.jl"))  # callback_struct, solver_model
+using LMEADMM   # src/LMEADMM.jl
 
 
 rho, mp = load_model("models/mvee/logdet-rho=3.0-m=50_ICNN.json")
@@ -28,5 +28,5 @@ end
 
 # NLP scaling off; mvee defines no Ipopt callbacks (it solves with Clarabel and Mosek)
 pick_solver(name, tol::FloatType = 1e-6, cbs::Union{Nothing, callback_struct} = nothing) =
-    solver_model(name, tol; scaling = false, madnlp_print_level = 5)
+    solver_model(name, tol; solvers = @__MODULE__, scaling = false, madnlp_print_level = 5)
   

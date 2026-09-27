@@ -1,6 +1,6 @@
 # The learned Moreau envelope: an input-convex neural network (ICNN) read from the
 # .json written by experiments/*/train.py, and its gradient with preallocated buffers.
-# Shared by every problem; the caller defines `const FloatType` before including it.
+# Part of the LMEADMM module (src/LMEADMM.jl).
 #
 #   rho, mp = load_model("models/<p>/<name>.json")
 #   model   = ICNN(mp)
