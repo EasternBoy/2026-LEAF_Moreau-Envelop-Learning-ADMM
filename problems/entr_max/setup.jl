@@ -1,4 +1,5 @@
 include("utils.jl")
+include(joinpath(@__DIR__, "..", "..", "src", "solvers.jl"))  # callback_struct, solver_model
 
 if !(@isdefined(GUROBI_ENV))
     GUROBI_ENV = Gurobi.Env() 
@@ -29,10 +30,6 @@ function Ipopt_callback_BM(
     return !stop #False means running, True means stopping
 end
 
-@kwdef mutable struct callback_struct
-    rel_opt_gap::Vector{FloatType} = FloatType[]
-    n_iter::Vector{Int} = Int[]
-end
 
 
 function ADMM_callback(
@@ -114,51 +111,8 @@ function Ipopt_callback_iter(
     return (iter_count < Ipopt_n_iter)
 end
 
-function pick_solver(name, tol::FloatType = 1e-6, cbs::Union{Nothing, callback_struct} = nothing)
-    #All solvers should share the same tolerance for stopping criteria
-    str = lowercase(name)
-
-    if str == "ipopt"      #for LP, QP, NLP
-        model = Model(Ipopt.Optimizer)
-        if tol >= 1e-3 # high tol implies low accuracy,
-            set_optimizer_attribute(model, "tol",  1e-4) 
-            MOI.set(model, Ipopt.CallbackFunction(), Ipopt_callback_BM) #set termination depends only on Ipopt_callback
-        else
-            set_optimizer_attribute(model, "tol",  tol) #High accuracy
-            if cbs !== nothing
-                cb_Ipopt = (args...) -> Ipopt_callback_iter(args..., cbs)
-                MOI.set(model, Ipopt.CallbackFunction(), cb_Ipopt) #get data from Ipopt
-            end
-        end
-
-    elseif str == "madnlp" #for NLP
-        model = Model(()->MadNLP.Optimizer())
-        MOI.set(model, MOI.Silent(), false)
-        # set_optimizer_attribute(model, "print_level", 5) 
-
-        set_optimizer_attribute(model, "blas_num_threads", nthreads())      
-        set_optimizer_attribute(model, "tol", tol) 
-
-
-    elseif str == "osqp"   #for LP, QP 
-        model = Model(OSQP.Optimizer); 
-        set_optimizer_attribute(model, "eps_abs", tol); 
-        set_optimizer_attribute(model, "eps_rel", tol)
-
-    elseif str == "gurobi" #for (MI)LP, (MI)QP, or (MI)NLP
-        model = Model(() -> Gurobi.Optimizer(GUROBI_ENV))
-
-    elseif str == "clarabel" #for NLP
-        model = Model(Clarabel.Optimizer)
-
-    elseif str == "ecos" #for NLP
-        model = Model(ECOS.Optimizer)
-
-    else
-        error("Specified solver is not supported")
-    end
-
-    set_silent(model)
-
-    return model
-end  
+# Ipopt stops on Ipopt_callback_BM for benchmark solves (tol ≥ 1e-3), records with Ipopt_callback_iter otherwise
+pick_solver(name, tol::FloatType = 1e-6, cbs::Union{Nothing, callback_struct} = nothing) =
+    solver_model(name, tol; early_stop = Ipopt_callback_BM,
+                 record = cbs === nothing ? nothing : (args...) -> Ipopt_callback_iter(args..., cbs))
+  

@@ -2,7 +2,7 @@
 
 | folder | contents |
 |---|---|
-| `src/` | code shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility), `icnn.jl` (the learned Moreau envelope: ICNN, `load_model`, `gradient_struct`, `mini_batch`), `kkt.jl` (the sLME-ADMM v-step: projection onto `{v : M v = b}` through one LDLᵀ-factored KKT system) |
+| `src/` | code shared by every problem: `metrics.jl` (optimality gap, constraint violation, feasibility), `icnn.jl` (the learned Moreau envelope: ICNN, `load_model`, `gradient_struct`, `mini_batch`), `kkt.jl` (the sLME-ADMM v-step: projection onto `{v : M v = b}` through one LDLᵀ-factored KKT system), `solvers.jl` (`solver_model`: JuMP models for Ipopt, MadNLP, OSQP, Gurobi, Clarabel, ECOS, Mosek; `callback_struct`) |
 | `problems/<p>/` | one problem's library code, included by the experiments, never run directly |
 | `experiments/<p>/` | runnable scripts: benchmarks, data generation, ICNN training, tables and figures |
 | `python/` | `micnn.py`: ICNN (Moreau-envelope model) training used by every `experiments/*/train.py`; `make_icnn(weight_act, keep_best)` selects each problem's settings |
@@ -19,7 +19,7 @@ Every `problems/<p>/` uses the same file names:
 | file | contents |
 |---|---|
 | `problem.jl` | problem data and objective (`data_opt`, `energy_mag`, ...) |
-| `setup.jl` | loads the trained ICNN, defines the stopping callbacks and `pick_solver` |
+| `setup.jl` | loads the trained ICNN, defines the stopping callbacks (they differ per problem) and `pick_solver` on top of `src/solvers.jl` |
 | `jump_solver.jl` | the JuMP/IPOPT baseline |
 | `admm.jl` | the ADMM baseline |
 | `lme_admm.jl` | LME-ADMM and sLME-ADMM (each problem keeps its own loop: the variants differ in their updates and stopping rules) |
