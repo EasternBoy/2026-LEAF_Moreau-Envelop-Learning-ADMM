@@ -3,13 +3,13 @@
 DC3 (*Deep Constraint Completion and Correction*, [Donti, Rolnick & Kolter,
 ICLR 2021](https://arxiv.org/abs/2104.12225), code
 [locuslab/DC3](https://github.com/locuslab/DC3)) applied to the problem in
-`examples/entr_max`.
+`problems/entr_max`.
 
 ---
 
 ## 1. The problem (source of truth: the Julia code)
 
-`examples/entr_max/maxEntropy.jl` and `JuMPsolver.jl` build, with
+`problems/entr_max/problem.jl` and `jump_solver.jl` build, with
 `scale = 2n`:
 
 ```julia
@@ -43,7 +43,7 @@ b = [sum(A[i,:]) / (1.06*n) for i in 1:m]
 never exercised by a benchmark and is not used here.)
 
 Default dimensions `n = 1000`, `m = 100` are those of
-`examples/entr_max/benchmarkOG.jl`; `configs/small.json` uses
+`experiments/entr_max/benchmark.jl`; `configs/small.json` uses
 `n = 100, m = 10`, which is the other size the repository benchmarks
 (`data/solving_data/maxEntropy-n=100m=10-*.npz`).
 

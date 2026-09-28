@@ -1,0 +1,21 @@
+{
+  "train_data": "data/entr_max/training/maxEntropy-manual-rho=1.0-train.npz",
+  "test_data": "data/entr_max/training/maxEntropy-n=1000m=100rho=1.0-test.npz",
+  "output": "models/entr_max/test",
+  "weight_act": "relu",
+  "keep_best": true,
+  "export_act": "relu",
+  "lower_bound": false,
+  "train": {
+    "widths": [
+      32,
+      32
+    ],
+    "lr": 0.001,
+    "grad_weight": 5.0,
+    "l2_reg": 0,
+    "batch_size": 256,
+    "epochs": 5000,
+    "seed": 0
+  }
+}

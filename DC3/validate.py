@@ -114,7 +114,7 @@ def validate_power(N=96, n_inst=4, seed=0, julia_npz: str | None = None):
     check("reference satisfies equalities", eqmax < 1e-6, f"max |h| = {eqmax:.2e}")
     check("reference satisfies inequalities", inmax < 1e-6, f"max viol = {inmax:.2e}")
 
-    # nominal instance must reproduce the hard-coded Jopt from preprocess.jl
+    # nominal instance must reproduce the hard-coded Jopt from problems/power_grid/setup.jl
     if N == 96:
         check("nominal instance reproduces Jopt = 36479.1",
               abs(J_py[0] - 36479.1) < 0.5, f"J = {J_py[0]:.4f}")

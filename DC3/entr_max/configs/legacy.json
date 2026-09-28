@@ -1,5 +1,5 @@
 {
-  "_comment": "Headline size of examples/entr_max/benchmarkOG.jl (n=1000, m=100). dc3.corr_lr selected by DC3/tune.py on the VALIDATION split only (results/entr_max-tune-large/tune_results.json); larger values make the correction diverge to NaN. See README section 7: DC3 does not reach feasibility at this size.",
+  "_comment": "Headline size of experiments/entr_max/benchmark.jl (n=1000, m=100). dc3.corr_lr selected by DC3/tune.py on the VALIDATION split only (results/entr_max-tune-large/tune_results.json); larger values make the correction diverge to NaN. See README section 7: DC3 does not reach feasibility at this size.",
   "problem": {
     "n": 1000,
     "m": 100,

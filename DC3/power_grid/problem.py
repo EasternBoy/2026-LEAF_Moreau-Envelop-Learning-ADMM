@@ -1,9 +1,9 @@
-"""Economic MPC for a PV + BESS microgrid, transcribed from ``examples/power_grid``.
+"""Economic MPC for a PV + BESS microgrid, transcribed from ``problems/power_grid``.
 
 Source of truth
 ---------------
-``examples/power_grid/power_system.jl`` (``energy_mag``, ``struct eco_mpc``) and
-``eMPC_JuMPsolver.jl`` (``mpc_eco_solver``).  With ``N = 96``, ``dT = 0.25 h``:
+``problems/power_grid/problem.jl`` (``energy_mag``, ``struct eco_mpc``) and
+``problems/power_grid/jump_solver.jl`` (``mpc_eco_solver``).  With ``N = 96``, ``dT = 0.25 h``:
 
     variables      m_k (grid import, kW), u_k (BESS power, kW),
                    p_k (delivered power, kW)  for k = 1..N,
@@ -22,7 +22,7 @@ The JuMP model writes the three non-smooth terms in epigraph form
 optimum equals the closed form above; that closed form is also the
 ``model === nothing`` branch of ``(obj::eco_mpc)(m, u, p, model)`` and is what is
 implemented here.  Verified: Ipopt on the nominal instance gives
-J = 36479.111, matching the hard-coded ``Jopt = 36479.1`` in ``preprocess.jl``.
+J = 36479.111, matching the hard-coded ``Jopt = 36479.1`` in ``problems/power_grid/setup.jl``.
 
 DC3 structure
 -------------

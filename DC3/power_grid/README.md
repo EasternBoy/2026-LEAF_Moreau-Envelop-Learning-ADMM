@@ -3,11 +3,11 @@
 DC3 (*Deep Constraint Completion and Correction*, [Donti, Rolnick & Kolter,
 ICLR 2021](https://arxiv.org/abs/2104.12225), code
 [locuslab/DC3](https://github.com/locuslab/DC3)) applied to the problem in
-`examples/power_grid`.
+`problems/power_grid`.
 
 **This is the repository's economic MPC, not the AC-OPF example of the DC3
-paper.**  The formulation below is a transcription of `power_system.jl` and
-`eMPC_JuMPsolver.jl`; nothing about the optimisation problem is changed.
+paper.**  The formulation below is a transcription of `problems/power_grid/problem.jl` and
+`jump_solver.jl`; nothing about the optimisation problem is changed.
 
 ---
 
@@ -33,7 +33,7 @@ equals the closed form above at the optimum; that closed form is also the
 
 **Verified:** Ipopt on the nominal instance (`x0 = 0.5`, first 96 CSV samples)
 gives `J = 36479.1113`, matching the hard-coded `Jopt = 36479.1` in
-`examples/power_grid/preprocess.jl`, and the Python objective reproduces it to
+`problems/power_grid/setup.jl`, and the Python objective reproduces it to
 1e-16 relative.
 
 ## 2. DC3 adaptation
@@ -47,7 +47,7 @@ g(y) ≤ 0                                                n_ineq = 5N = 480
 ```
 
 `A_eq` is exactly the matrix `M` assembled by
-`examples/power_grid/utils.jl::dynamics_projection` (same row order: `N` dynamics
+`problems/power_grid/utils.jl::dynamics_projection` (same row order: `N` dynamics
 rows, the terminal row, then `N` power-flow rows).
 
 **Variable partition** (`n_y − n_eq = 2N−1 = 191` predicted variables):
@@ -125,7 +125,7 @@ gives `p ≈ 0` and an objective of ~10¹³.  Two measures:
 `MOI.Parameter`:
 
 * `x0 ~ U(0.25, 0.75)` — brackets the pool used for the ADMM training data in
-  `data_eMPC_power.jl` (`train_pool = [1/2, 2/3, 3/4]`, `test_pool = [3/5]`);
+  `experiments/power_grid/data_gen.jl` (`train_pool = [1/2, 2/3, 3/4]`, `test_pool = [3/5]`);
 * `(load, gen)` = the length-`N` window of the two CSVs starting at offset `s`,
   with `s` drawn from an offset pool.  The 97 admissible offsets are split
   **disjointly** 60/20/20 between train/validation/test, so no forecast window is

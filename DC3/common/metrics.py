@@ -5,7 +5,7 @@ Conventions
 * Objective values are reported in the *same* convention as the Julia code
   (`sum w log w` for the cone program; the raw eco-MPC cost for the power grid).
 * ``gap_pct`` is ``100 * |J - J_ref| / |J_ref|``, which is what
-  `examples/*/benchmark*.jl` and `preprocess.jl` print.  Because that absolute
+  `experiments/*/benchmark*.jl` and `problems/*/setup.jl` print.  Because that absolute
   value hides the *direction* of the error - and a constraint-violating point
   can easily undercut the true optimum - ``signed_gap_pct`` is reported next to
   it, and all gap aggregates are additionally computed over the feasible subset

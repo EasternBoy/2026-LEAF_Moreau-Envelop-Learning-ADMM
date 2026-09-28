@@ -30,10 +30,10 @@ const tol::FloatType = oracle_mode ? 1e-2 : 1e-6
 include(joinpath(@__DIR__, "metrics.jl"))
 
 GUROBI_ENV = nothing                   # skip Gurobi.Env() (no license here)
-include(joinpath(REPO, "examples", "power_grid", "power_system.jl"))
-include(joinpath(REPO, "examples", "power_grid", "preprocess.jl"))
-include(joinpath(REPO, "examples", "power_grid", "eMPC_JuMPsolver.jl"))
-include(joinpath(REPO, "examples", "power_grid", "eMPC_L-ADMM.jl"))
+include(joinpath(REPO, "problems", "power_grid", "problem.jl"))
+include(joinpath(REPO, "problems", "power_grid", "setup.jl"))
+include(joinpath(REPO, "problems", "power_grid", "jump_solver.jl"))
+include(joinpath(REPO, "problems", "power_grid", "lme_admm.jl"))
 
 @assert Nw == mpc_data.N "instance horizon $(Nw) != energy_mag() N=$(mpc_data.N)"
 @printf("power baselines: %d instances, N=%d, max_opt_gap=%.4g%%\n", count_, Nw, max_opt_gap)
@@ -46,7 +46,7 @@ metrics_hi = NamedTuple[]; metrics_bm = NamedTuple[]; metrics_sl = NamedTuple[]
 iterations = zeros(Int, count_)
 
 sol_hi = mpc_eco_solver("Ipopt", mpc_data, 1e-10)
-mgrad   = gradient_struct(model, s_mb, dim)
+mgrad   = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)
 aux_sol = dynamics_projection(mpc_data)
 admm    = LME_ADMM_split(mpc_data, mgrad, aux_sol)
 
