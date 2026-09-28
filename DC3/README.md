@@ -77,6 +77,65 @@ $PY -m DC3.report --app entr_max --tag small
 Every config key can be overridden from the command line:
 `--set dc3.epochs=500 dc3.corr_lr=1e-2 data.n_test=200`.
 
+## Power-grid comparison table
+
+The publication-style power-grid workflow compares IPOPT, MadNLP, ADMM,
+MEL-ADMM, sMEL-ADMM, and DC3 on the same saved instances. Run every command
+from the repository root. The Julia benchmark uses Gurobi for ADMM and
+MEL-ADMM, so those methods require a working Gurobi installation and license.
+
+Before running a horizon, set the same `N` in both:
+
+- `script/power_grid/power_grid_table.jl`
+- `DC3/power_grid/benchmark/table_benchmark.py`
+
+Also set `g_opt` in `power_grid_table.jl` to the desired target optimality gap
+in percent (`0.1` means `0.1%`). Then run, for example, the `N = 96` case:
+
+```bash
+PY=DC3/.venv/bin/python
+
+# Create the shared inputs once. Reuse the file if it already exists.
+$PY -m DC3.power_grid.benchmark.generate_table_instances \
+    --N 96 --samples 1000 --seed 20262309
+
+# Train and evaluate DC3 on those inputs.
+$PY -m DC3.power_grid.benchmark.train_table --tag table-N96
+$PY -m DC3.power_grid.benchmark.table_benchmark \
+    --checkpoint DC3/results/power_grid-table-N96/checkpoint.pt
+
+# Run the Julia solvers on the same inputs.
+julia --project=. --threads=8 script/power_grid/power_grid_table.jl
+```
+
+To run `N = 192`, change both `N` constants to `192`, generate the `N = 192`
+inputs, and use a distinct checkpoint tag such as `table-N192`:
+
+```bash
+$PY -m DC3.power_grid.benchmark.generate_table_instances \
+    --N 192 --samples 1000 --seed 20262309
+$PY -m DC3.power_grid.benchmark.train_table --tag table-N192
+$PY -m DC3.power_grid.benchmark.table_benchmark \
+    --checkpoint DC3/results/power_grid-table-N192/checkpoint.pt
+julia --project=. --threads=8 script/power_grid/power_grid_table.jl
+```
+
+Julia results are written to
+`data/solving_data/power_table_gap=<g_opt>/`. A rerun replaces the matching
+case-specific Julia files. Input generation and DC3 training do not overwrite
+existing files; reuse existing inputs or choose a new checkpoint tag.
+
+After both horizons are complete, set `G_OPT` in
+`script/power_grid/power_grid_boxplot.py` equal to Julia's `g_opt`, ensure its
+`OUT` path uses `power_table_gap=<G_OPT>`, and generate the figures:
+
+```bash
+$PY script/power_grid/power_grid_boxplot.py
+```
+
+The PDFs are saved alongside the Julia results in the corresponding
+`power_table_gap=<G_OPT>` directory.
+
 ## What the implementation does
 
 1. **Partial-variable prediction** — an MLP (`Linear → BatchNorm → ReLU →
