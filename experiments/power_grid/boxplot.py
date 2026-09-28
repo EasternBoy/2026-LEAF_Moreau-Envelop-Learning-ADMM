@@ -24,11 +24,13 @@ G_OPT = 1.0
 TABLE_OUT = os.path.join(REPO, "results", "power_grid", "table")
 OUT = os.path.join(TABLE_OUT, f"gap={G_OPT}")
 DC3_OUT = TABLE_OUT
+FIGURES_OUT = os.path.join(REPO, "results", "power_grid", "figures")
 HORIZONS = [96, 192]
 FLOOR = 1e-17
-BASE_SIZE = 10
-LABEL_SIZE = 15
-TICK_SIZE = 1.3 * LABEL_SIZE
+# Compensate for the larger canvas being reduced to fit the paper.
+BASE_SIZE = 18
+LABEL_SIZE = 27
+TICK_SIZE = 1.1 * LABEL_SIZE
 YLABEL_SIZE = 1.5 * LABEL_SIZE
 METHODS = [
     ("IPOPT", "#e377c2"),
@@ -106,7 +108,7 @@ def boxes(ax, values):
 
 
 def figure(metric: int, ylabel: str, references, filename: str):
-    fig, axes = plt.subplots(1, len(HORIZONS), figsize=(7 * len(HORIZONS), 5),
+    fig, axes = plt.subplots(1, len(HORIZONS), figsize=(10 * len(HORIZONS), 6),
                              sharey=True, constrained_layout=True)
     axes = np.atleast_1d(axes)
     for panel, (N, ax) in enumerate(zip(HORIZONS, axes)):
@@ -119,14 +121,14 @@ def figure(metric: int, ylabel: str, references, filename: str):
         ax.set_title(f"$N = {N}$", fontsize=2 * BASE_SIZE)
         ax.tick_params(labelsize=TICK_SIZE)
     axes[0].set_ylabel(ylabel, fontsize=YLABEL_SIZE)
-    path = os.path.join(OUT, f"{filename}.pdf")
+    path = os.path.join(FIGURES_OUT, f"{filename}_optgap={G_OPT:g}.pdf")
     fig.savefig(path)
     plt.close(fig)
     print(f"saved {path}")
 
 
 def main():
-    os.makedirs(OUT, exist_ok=True)
+    os.makedirs(FIGURES_OUT, exist_ok=True)
     plt.rcParams.update({
         "text.usetex": True,
         "font.family": "serif",

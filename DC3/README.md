@@ -132,8 +132,7 @@ After both horizons are complete, set `G_OPT` in
 $PY experiments/power_grid/boxplot.py
 ```
 
-The PDFs are saved alongside the Julia results in the corresponding
-`results/power_grid/table/gap=<G_OPT>` directory.
+The PDFs are saved in `results/power_grid/figures/`.
 
 ## What the implementation does
 
