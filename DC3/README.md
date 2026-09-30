@@ -11,7 +11,7 @@ applied to the two applications of this repository:
 | [`power_grid/`](power_grid/README.md) | economic MPC of a PV + BESS microgrid | `problems/power_grid` |
 
 The Julia drivers in `DC3/julia/` `include`
-the existing example files so that the repository's own solvers
+the shared problem files so that the repository's own solvers
 (Ipopt, sLME-ADMM, LME-ADMM) are benchmarked on **the same instances** as DC3.
 
 Attribution and the upstream license are in
@@ -76,6 +76,63 @@ $PY -m DC3.report --app entr_max --tag small
 
 Every config key can be overridden from the command line:
 `--set dc3.epochs=500 dc3.corr_lr=1e-2 data.n_test=200`.
+
+## Power-grid comparison table
+
+The publication-style power-grid workflow compares IPOPT, MadNLP, ADMM,
+MEL-ADMM, sMEL-ADMM, and DC3 on the same saved instances. Run every command
+from the repository root. The Julia benchmark uses Gurobi for ADMM and
+MEL-ADMM, so those methods require a working Gurobi installation and license.
+
+Before running a horizon, set the same `N` in both:
+
+- `experiments/power_grid/table.jl`
+- `experiments/power_grid/table_benchmark.py`
+
+Also set `g_opt` in `table.jl` to the desired target optimality gap
+in percent (`0.1` means `0.1%`). Then run, for example, the `N = 96` case:
+
+```bash
+PY=DC3/.venv/bin/python
+
+# Create the shared inputs once. Reuse the file if it already exists.
+$PY experiments/power_grid/generate_table_instances.py \
+    --N 96 --samples 1000 --seed 20262309
+
+# Train and evaluate DC3 on those inputs.
+$PY experiments/power_grid/train_table.py --tag table-N96
+$PY experiments/power_grid/table_benchmark.py \
+    --checkpoint DC3/results/power_grid-table-N96/checkpoint.pt
+
+# Run the Julia solvers on the same inputs.
+julia --project=. --threads=8 experiments/power_grid/table.jl
+```
+
+To run `N = 192`, change both `N` constants to `192`, generate the `N = 192`
+inputs, and use a distinct checkpoint tag such as `table-N192`:
+
+```bash
+$PY experiments/power_grid/generate_table_instances.py \
+    --N 192 --samples 1000 --seed 20262309
+$PY experiments/power_grid/train_table.py --tag table-N192
+$PY experiments/power_grid/table_benchmark.py \
+    --checkpoint DC3/results/power_grid-table-N192/checkpoint.pt
+julia --project=. --threads=8 experiments/power_grid/table.jl
+```
+
+Julia results are written to
+`results/power_grid/table/gap=<g_opt>/`. A rerun replaces the matching
+case-specific Julia files. Input generation and DC3 training do not overwrite
+existing files; reuse existing inputs or choose a new checkpoint tag.
+
+After both horizons are complete, set `G_OPT` in
+`experiments/power_grid/boxplot.py` equal to Julia's `g_opt` and generate the figures:
+
+```bash
+$PY experiments/power_grid/boxplot.py
+```
+
+The PDFs are saved in `results/power_grid/figures/`.
 
 ## What the implementation does
 

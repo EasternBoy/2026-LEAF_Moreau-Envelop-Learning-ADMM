@@ -1,7 +1,18 @@
 # Check the returned iterate, including the strict domain p > 0.
 function eco_solution_feasible(data, v, init, load, gen, tol)
     all(isfinite, v) || return false
-    m, u, p, x = eachrow(v)
+    m, u, p = eachrow(@view v[1:3, :])
+    if size(v, 1) == 3
+        x = similar(u)
+        previous_state = init
+        for k in eachindex(u)
+            x[k] = data.A * previous_state + data.B * u[k]
+            previous_state = x[k]
+        end
+    else
+        x = @view v[4, :]
+    end
+    all(isfinite, x) || return false
     all(>(0), p) || return false
     previous = vcat(init, x[1:end-1])
     eq = max(maximum(abs, data.A .* previous .+ data.B .* u .- x),
@@ -62,7 +73,10 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
                     CALL_BACK_STATUS = callback(z, w, α, i, J, total_time)
                 end
 
-                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(abs, buffer) < tol)
+                residual = maximum(abs, buffer)
+                feasible = eco_solution_feasible(data, w, x0, load_fc, gen_fc, tol)
+                TERMINATION_STATUS = residual < tol && feasible &&
+                                     (callback === nothing || CALL_BACK_STATUS)
 
                 if TERMINATION_STATUS
                     if verbose  println("Learning ADMM converges at iteration $i with objective value = $J")  end
@@ -96,7 +110,6 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
     n_mb = div(data.N - 1, column_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb)
 
-
     let N   = data.N,
         dim = data.dim,
         ρ   = data.rho,
@@ -112,12 +125,14 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
             end
 
             J = 0
-            start_time = time()
+            total_time = 0.
 
             for i in 1:max_iter
+                start_time = time_ns()
                 # ==== z-update ====
                 buffer1 .= v .+ β
-                @views z[1:dim, :] .= buffer1[1:dim, :] .- mini_batch(local_gradients, buffer1[1:dim, :])./ρ
+                @views z[1:dim, :] .= buffer1[1:dim, :] .-
+                    mini_batch(local_gradients, buffer1[1:dim, :])./ρ
                 @views copyto!(z[dim+1, :], buffer1[dim+1, :])  # no learning for state variable
 
                 # ==== v-update ====
@@ -139,6 +154,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 α .+= buffer1
                 β .+= buffer2
 
+                total_time += time_ns() - start_time
                 CALL_BACK_STATUS = false
                 J = get_objective(data, v)
 
@@ -161,7 +177,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 end
             end
 
-            return v, time() - start_time
+            return v, total_time / 1e9
         end
     end
 end
@@ -170,68 +186,3 @@ end
     J = sum(data.cost_func(z[1,k], z[2,k], z[3,k]) for k in 1:data.N)
     return J
 end
-
-
-# function  res_J_update(data::MPCData_eco, z::Matrix{FloatType}, w::Matrix{FloatType}, α::Matrix{FloatType})
-#     @inbounds @simd for i in eachindex(α)
-#         α[i] += w[i] - z[i]
-#     end
-
-#     J       = get_objective(data, w)
-#     opt_gap = 100abs(J - Jopt)/Jopt #w is already feasible
-
-#     return opt_gap, J
-# end
-
-# function res_J_update(data::MPCData_eco, z::Matrix{FloatType}, w::Matrix{FloatType}, α::Matrix{FloatType}, v::Matrix{FloatType}, β::Matrix{FloatType})
-#     @inbounds @simd for i in eachindex(β)
-#         β[i] += v[i] - z[i]
-#         α[i] += w[i] - v[i]
-#     end
-
-#     J       = get_objective(data, v)
-#     opt_gap = 100abs(J - Jopt)/Jopt + 1e9norm(w .- v, Inf) #only feasible solutions are used
-#     return opt_gap, J
-# end
-
-# function res_update(z::Matrix{FloatType}, w::Matrix{FloatType}, α::Matrix{FloatType})
-#     res = similar(z) 
-#     @inbounds @simd for i in eachindex(α)
-#         r = w[i] - z[i]
-#         α[i] += r
-#         res[i] = r
-#     end
-
-#     return maximum(res)
-# end
-
-# function res_update(z::Matrix{FloatType}, w::Matrix{FloatType}, α::Matrix{FloatType}, v::Matrix{FloatType}, β::Matrix{FloatType})
-#     max_res = copy(β) 
-#     @inbounds @simd for i in eachindex(β)
-#         r1 = v[i] - z[i]
-#         r2 = w[i] - v[i]
-#         β[i] += r1
-#         α[i] += r2
-
-#         max_res[i] = abs(r1) > abs(r2) ? abs(r1) : abs(r2) 
-#     end
-#     return maximum(max_res)
-# end
-
-
-# mutable struct sLME_ADMM
-
-#     u_min::FloatType
-#     u_max::FloatType
-#     x_min::FloatType
-#     x_max::FloatType
-#     ρ::FloatType
-#     gradient::gradient_struct
-#     aux_sol::Function
-#     z::MMatrix
-#     w::MMatrix
-#     v::MMatrix
-#     α::MMatrix
-#     β::MMatrix
-#     buffer::MMatrix
-# end

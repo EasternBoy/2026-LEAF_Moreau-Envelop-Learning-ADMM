@@ -32,7 +32,7 @@ function prime_sol_struct(name::String, mpc_para::MPCData_eco)
 end
 
 function (obj::prime_sol_struct)(q::Matrix{FloatType})
-    MOI.set.(obj.model, POI.ParameterValue(), obj.model[:para], q)
+    set_parameter_value.(obj.model[:para], q)
     optimize!(obj.model)
 
     vars       = copy(q)
@@ -192,10 +192,10 @@ function aux_solver_eco(solver_name::String, mpc_para::MPCData_eco)
 
     let model = model
         return function solver(q::Matrix{FloatType}, init::FloatType, load::Vector{FloatType}, generator::Vector{FloatType})
-            MOI.set.(model, POI.ParameterValue(), model[:para], q)
-            MOI.set.(model, POI.ParameterValue(), model[:load], load)
-            MOI.set.(model, POI.ParameterValue(), model[:generator], generator)
-            MOI.set.(model, POI.ParameterValue(), model[:x0], init)
+            set_parameter_value.(model[:para], q)
+            set_parameter_value.(model[:load], load)
+            set_parameter_value.(model[:generator], generator)
+            set_parameter_value(model[:x0], init)
 
             optimize!(model)
             
@@ -283,7 +283,7 @@ function prime_solver_eco_data(name::String, mpc_para::MPCData_eco)
 
     let model = model
         return @inbounds function solver(q::Vector{FloatType})
-            MOI.set.(model, POI.ParameterValue(), model[:para], q)
+            set_parameter_value.(model[:para], q)
             optimize!(model)
             vars = [JuMP.value.(model[:m]), JuMP.value.(model[:u]), JuMP.value.(model[:p])]
             return vars, objective_value(model)
@@ -337,10 +337,10 @@ function aux_solver_eco_data(solver_name::String, mpc_para::MPCData_eco)
     optimize!(model) #build model
 
     function solver(q::Matrix{FloatType}, init::FloatType, load::Vector{FloatType}, generator::Vector{FloatType})
-        MOI.set.(model, POI.ParameterValue(), model[:para], q)
-        MOI.set.(model, POI.ParameterValue(), model[:load], load)
-        MOI.set.(model, POI.ParameterValue(), model[:generator], generator)
-        MOI.set.(model, POI.ParameterValue(), model[:x0], init)
+        set_parameter_value.(model[:para], q)
+        set_parameter_value.(model[:load], load)
+        set_parameter_value.(model[:generator], generator)
+        set_parameter_value(model[:x0], init)
 
         optimize!(model)
         
