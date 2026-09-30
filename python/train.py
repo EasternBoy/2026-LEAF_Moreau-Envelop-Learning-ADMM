@@ -5,9 +5,14 @@
 
 Problems: entr_max, mpc, power_grid, mvee.  The config sets the data, the output path
 (<output>.json is read by load_model in src/icnn.jl, <output>.pkl keeps the JAX
-parameters), the training choices of make_icnn (weight_act, keep_best), the projection
+parameters; an output ending in .npz is written as that single file, which load_model
+also reads), the training choices of make_icnn (weight_act, keep_best), the projection
 applied to the exported weights (export_act), whether the loss uses the lower bounds
-`org_f` of the data (lower_bound), and the arguments of train_icnn (train).
+`org_f` of the data (lower_bound), and the arguments of train_icnn (train).  A config with
+"self_supervised": {"objective": <name in micnn.OBJECTIVES>, ...its arguments} trains without
+prox solves or gradient labels instead (train_icnn_selfsup, whose arguments are then in train);
+a "label_weight" > 0 in train adds the ME labels as a supervised value term.  The labels of the
+test data are still used by report_test.
 Paths in a config are relative to the repository root.
 """
 
@@ -18,7 +23,7 @@ import os
 import jax
 import numpy as np
 
-from micnn import WEIGHT_ACTS, make_icnn, report_test, save_model
+from micnn import OBJECTIVES, WEIGHT_ACTS, make_icnn, report_test, save_model
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs")
@@ -47,13 +52,20 @@ def main():
     print(f"Number of data: {N}")
 
     icnn = make_icnn(cfg["weight_act"], keep_best=cfg["keep_best"])
-    if cfg["lower_bound"]:
-        train_args["f"] = data_train["org_f"]
-    params = icnn.train_icnn(Xtr, ytr, gtr, n_in=n, **train_args)
+    if "self_supervised" in cfg:   # no gradient labels; the ME labels only with label_weight > 0
+        ss = dict(cfg["self_supervised"])
+        objective = OBJECTIVES[ss.pop("objective")](**ss)
+        use_labels = train_args.get("label_weight", 0) > 0   # the ME labels (not the gradient labels)
+        params = icnn.train_icnn_selfsup(Xtr, n_in=n, objective=objective, rho=data_train["rho"].item(),
+                                         y=ytr if use_labels else None, **train_args)
+    else:
+        if cfg["lower_bound"]:
+            train_args["f"] = data_train["org_f"]
+        params = icnn.train_icnn(Xtr, ytr, gtr, n_in=n, **train_args)
 
     report_test(icnn, params, Xva, yva, gva)
     save_model(params, data_train["rho"].item(), output, export_act=WEIGHT_ACTS[cfg["export_act"]])
-    print(f"saved {output}.json and {output}.pkl")
+    print(f"saved {output}" if output.endswith(".npz") else f"saved {output}.json and {output}.pkl")
 
 
 if __name__ == "__main__":

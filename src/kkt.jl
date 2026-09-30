@@ -6,7 +6,7 @@
 #
 #   K = kkt_matrix(M)                 # before the timer, as each problem did
 #   P = AffineProjection(K, b)        # factorization: inside or outside the timer, as before
-#   v .= P(q)
+#   v .= P(q)                         # or project!(v, P, q): in place, no allocation
 
 "KKT matrix `[I Mᵀ; M −δI]`; δ > 0 makes it strictly quasi-definite for `ldl`."
 function kkt_matrix(M::SparseMatrixCSC; δ::Real = 0.0)
@@ -19,12 +19,24 @@ struct AffineProjection{T}
     F::T                      # LDLᵀ factorization of the KKT matrix
     RHS::Vector{FloatType}    # [q; b]: b fixed, q written by each call
     n::Int
+    sol::Vector{FloatType}    # workspace of project!
 end
 
-AffineProjection(K::SparseMatrixCSC, b::AbstractVector) =
-    AffineProjection(ldl(K), [zeros(FloatType, size(K, 1) - length(b)); b], size(K, 1) - length(b))
+function AffineProjection(K::SparseMatrixCSC, b::AbstractVector)
+    RHS = [zeros(FloatType, size(K, 1) - length(b)); b]
+    return AffineProjection(ldl(K), RHS, size(K, 1) - length(b), similar(RHS))
+end
 
 function (P::AffineProjection)(q::AbstractVector)
     P.RHS[1:P.n] .= q
     return (P.F \ P.RHS)[1:P.n]
+end
+
+"v = P(q) in place: the solve runs in P's workspace."
+function project!(v::AbstractVector, P::AffineProjection, q::AbstractVector)
+    P.RHS[1:P.n] .= q
+    copyto!(P.sol, P.RHS)
+    ldiv!(P.F, P.sol)
+    @views v .= P.sol[1:P.n]
+    return v
 end

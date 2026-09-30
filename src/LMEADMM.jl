@@ -12,7 +12,7 @@ scripts can keep their own `const FloatType = Float64`).
 module LMEADMM
 
 using LinearAlgebra, SparseArrays, Base.Threads
-using NNlib, JSON3, LDLFactorizations, JuMP
+using NNlib, JSON3, NPZ, LDLFactorizations, JuMP
 import MathOptInterface as MOI
 
 const FloatType = Float64
@@ -25,10 +25,10 @@ include("solvers.jl")
 # metrics.jl: optimality gap, constraint violation, feasibility
 export FEAS_TOL, METRICS_VERSION, opt_gap, score, entr_max_objective, entr_max_violation, score_entr_max
 # icnn.jl: the learned Moreau envelope and its gradient
-export load_model, ICNN, ICNN_Layer, gradient_struct, mini_batch, vector_chunk, column_chunk,
+export load_model, ICNN, ICNN_Layer, gradient_struct, mini_batch, mini_batch!, vector_chunk, column_chunk,
        mul_add!, mmul_add_matrix!
 # kkt.jl: the sLME-ADMM v-step
-export kkt_matrix, AffineProjection
+export kkt_matrix, AffineProjection, project!
 # solvers.jl: JuMP models of the reference solvers
 export callback_struct, solver_model
 

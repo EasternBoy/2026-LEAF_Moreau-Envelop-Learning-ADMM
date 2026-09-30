@@ -208,9 +208,85 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
 
         return best_params if keep_best else params
 
+    def train_icnn_selfsup(
+        X: np.ndarray,
+        n_in: int,
+        objective,
+        rho: float,
+        widths: List[int] = [64, 64, 64],
+        lr: float = 1e-3,
+        l2_reg: float = 0,
+        batch_size: int = 128,
+        epochs: int = 200,
+        seed: int = 0,
+        y: Optional[np.ndarray] = None,
+        label_weight: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Training without prox solves or gradient labels.  With p = x - ∇f_θ(x)/rho, the prox
+        given by ∇ME = rho (x - prox(x)), the loss is
+            mean[ objective(p) + rho/2 |p - x|² ]          (minimized at p = prox(x))
+          + label_weight · mean[ (f_θ(x) - y)² ]           (given value labels y = ME(x))
+        keep_best uses this loss."""
+
+        def losses(params, xb, yb):
+            p = xb - batched_grad_wrt_x(params, xb) / rho
+            prox_obj = objective(p) + rho / 2 * jnp.sum((p - xb) ** 2, axis=1)
+            label_gap = 0.0 if yb is None else jnp.mean((batched_forward(params, xb) - yb) ** 2)
+            return jnp.mean(prox_obj), label_gap
+
+        def loss(params, xb, yb):
+            po, lg = losses(params, xb, yb)
+            return po + label_weight * lg
+
+        key = jax.random.PRNGKey(seed)
+        Xj = jnp.asarray(X, dtype=jnp.float32)
+        yj = None if y is None else jnp.asarray(y, dtype=jnp.float32)
+        arrays = [Xj] if y is None else [Xj, yj]
+        params = init_icnn_params(key, n_in=n_in, widths=widths)
+        best_params, best_val = params, jnp.inf
+        optimizer = optax.adamw(learning_rate=lr, weight_decay=l2_reg)
+        opt_state = optimizer.init(params)
+
+        @jax.jit
+        def train_step(params, opt_state, xb, yb=None):
+            grads = jax.grad(loss)(params, xb, yb)
+            updates, opt_state = optimizer.update(grads, opt_state, params)
+            return optax.apply_updates(params, updates), opt_state
+
+        for ep in range(1, epochs + 1):
+            it_key, key = jax.random.split(key)
+            for batch in batch_iterator(arrays, batch_size, it_key):
+                params, opt_state = train_step(params, opt_state, *batch)
+
+            if ep % max(1, epochs // 10) == 0 or ep == 1:
+                po, lg = losses(params, Xj, yj)
+                val_obj = po + label_weight * lg
+                if keep_best and val_obj < best_val:
+                    best_val = val_obj
+                    best_params = jax.tree_util.tree_map(lambda x: x.copy(), params)
+                print(f"Epoch {ep:4d} | prox objective: {po:.6e} | label gap: {lg:.4e}")
+
+        return best_params if keep_best else params
+
     return SimpleNamespace(act_p=act_p, icnn_forward=icnn_forward, batched_forward=batched_forward,
                            grad_wrt_x=grad_wrt_x, batched_grad_wrt_x=batched_grad_wrt_x,
-                           loss_fn=loss_fn, loss_fn_bounded=loss_fn_bounded, train_icnn=train_icnn)
+                           loss_fn=loss_fn, loss_fn_bounded=loss_fn_bounded, train_icnn=train_icnn,
+                           train_icnn_selfsup=train_icnn_selfsup)
+
+
+# -----------------------------
+# Objectives for training without prox solves (train_icnn_selfsup): f summed over the input, per sample
+# -----------------------------
+def entr_max_objective(S0: float, eps: float = 1e-9):
+    """x log(x/S0), the entr_max prox function (problems/entr_max/admm.jl), for x >= eps;
+    a steep quadratic below eps, where the prox never lies."""
+    def f(p):
+        pc = jnp.maximum(p, eps)
+        return jnp.sum(pc * jnp.log(pc / S0) + 1e3 * jax.nn.relu(eps - p) ** 2, axis=1)
+    return f
+
+
+OBJECTIVES = {"entr_max": entr_max_objective}
 
 
 # -----------------------------
@@ -242,11 +318,18 @@ def report_test(icnn: SimpleNamespace, params, Xva, yva, gva) -> None:
 def save_model(params, rho: float, path_to_save: str, export_act) -> None:
     """Writes <path>.pkl and <path>.json (read by load_model in src/icnn.jl) with the
     projection export_act applied to v and the state weights W[1:], as the Julia ICNN
-    uses the weights as they are."""
+    uses the weights as they are.  A path ending in .npz writes that one file instead:
+    U1.., W1.., b1.. (one per layer), v, a, c and rho, in float64."""
     params["rho"] = rho
     params["v"]   = export_act(params["v"])
     for i in range(1, len(params["W"])):
         params["W"][i] = export_act(params["W"][i])
+    if path_to_save.endswith(".npz"):
+        arrays = {"v": params["v"], "a": params["a"], "c": params["c"], "rho": rho}
+        for key in ("U", "W", "b"):
+            arrays.update({f"{key}{i + 1}": x for i, x in enumerate(params[key])})
+        np.savez(path_to_save, **{k: np.asarray(x, dtype=np.float64) for k, x in arrays.items()})
+        return
     with open(path_to_save + ".pkl", "wb") as f:
         pickle.dump(params, f)
     with open(path_to_save + ".json", 'w') as f:

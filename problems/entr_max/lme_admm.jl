@@ -114,6 +114,8 @@ end
     β       = copy(z)
     buffer1 = copy(z)
     buffer2 = copy(z)
+    grad    = zeros(FloatType, n)   # ∇ICNN at buffer1[1:n]
+    x_obj   = zeros(FloatType, n)   # w[1:n]/scale, the point the callback scores
 
     n_mb = div(n-1, vector_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
@@ -130,14 +132,14 @@ end
     for i in 1:max_iter
         # ==== z-update ====
         @. buffer1 = v + β
-        z[1:n]     .= buffer1[1:n] .- mini_batch(local_gradients, buffer1[1:n])./ρ
-        z[n+1:n+m] .= buffer1[n+1:n+m]
+        mini_batch!(grad, local_gradients, view(buffer1, 1:n))
+        @views @. z[1:n] = buffer1[1:n] - grad/ρ
+        @views z[n+1:n+m] .= buffer1[n+1:n+m]
 
         # ==== v-update ====
         # Use the equality constraints in v-update
         @. buffer1 = (z - β + w + α)/2
-        # v .= aux_sol(buffer1)
-        v[1:n+m]   .= proj(buffer1[1:n+m])
+        project!(v, proj, buffer1)
         
         # ==== w-update ====
         # Use the inequality constraints in v-update
@@ -153,11 +155,12 @@ end
         CALL_BACK_STATUS = true   # without a callback, stop on the residual alone
 
         if callback !== nothing
-            J = get_objective(data, w[1:n] ./ scale)   # w = [x; s]: exclude the m slacks
-            CALL_BACK_STATUS = callback(z, w, α, v, β, i, J)
+            @views @. x_obj = w[1:n] / scale         # w = [x; s]: exclude the m slacks
+            J = get_objective(data, x_obj)
+            CALL_BACK_STATUS = callback(z, w, α, v, β, i, J, (time_ns() - start_time)/1e9)
         end
 
-        residual = max(maximum(abs.(buffer1)), maximum(abs.(buffer2)))
+        residual = max(maximum(abs, buffer1), maximum(abs, buffer2))
         TERMINATION_STATUS = CALL_BACK_STATUS && (residual < tol)
 
         ## ============== Check termination ===========

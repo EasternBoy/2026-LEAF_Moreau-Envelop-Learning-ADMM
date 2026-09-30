@@ -7,7 +7,7 @@ include(joinpath(@__DIR__, "table.jl"))   # helpers only (not a worker, runs not
 function run_row(nn, mm)
     need = [gt_file(nn, mm); [res_file(me, g, nn, mm) for me in METHODS for (_, g) in GOPTS]]
     (FORCE || !isfile(need[1]) || !all(is_current, need[2:end])) || return
-    cmd = `$(Base.julia_cmd()) --project=$REPO --threads=auto $(joinpath(@__DIR__, "table.jl")) worker $nn $mm`
+    cmd = `$(Base.julia_cmd()) --project=$REPO --threads=auto $(joinpath(@__DIR__, "table.jl")) worker $nn $mm $PASS_ARGS`
     FORCE && (cmd = `$cmd --force`)
     run(cmd)
 end
@@ -50,7 +50,8 @@ function render_row(nn, mm)
     |---|---|---|---|---|---|
     $(join(rows, "\n"))
     """
-    write(joinpath(OUT, "entr_max_row-n=$(nn)-m=$(mm).md"), md)
+    mkpath(OUT_TAG)
+    write(joinpath(OUT_TAG, "entr_max_row-n=$(nn)-m=$(mm).md"), md)
     println(md)
 end
 

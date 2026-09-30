@@ -21,7 +21,16 @@ const SLME_TOL  = 1e-5       # sLME-ADMM residual tolerance on w: tol = SLME_TOL
 
 inst_file(n, m)           = joinpath(INST_DIR, "instances-n=$(n)-m=$(m).npz")
 gt_file(n, m)             = joinpath(OUT, "ground_truth-n=$(n)-m=$(m).npz")
-res_file(meth, g, n, m)   = joinpath(OUT, "$(meth)-gopt=$(g)-n=$(n)-m=$(m).npz")
+# --model=<path>: the ICNN sLME-ADMM uses (default: the one in problems/entr_max/utils.jl);
+# --tag=<name>: its sLME-ADMM results and table go to OUT/<name>, the other methods are read from OUT.
+argval(key) = (i = findfirst(a -> startswith(a, "--$key="), ARGS); i === nothing ? nothing : String(split(ARGS[i], "="; limit = 2)[2]))
+const MODEL_ARG = argval("model")
+const TAG       = something(argval("tag"), "")
+const OUT_TAG   = isempty(TAG) ? OUT : joinpath(OUT, TAG)
+const PASS_ARGS = filter(a -> startswith(a, "--model=") || startswith(a, "--tag="), ARGS)
+MODEL_ARG === nothing || (ICNN_MODEL = MODEL_ARG)   # read by problems/entr_max/utils.jl
+
+res_file(meth, g, n, m)   = joinpath(meth == "sLME-ADMM" ? OUT_TAG : OUT, "$(meth)-gopt=$(g)-n=$(n)-m=$(m).npz")
 dc3_file(n, m)            = joinpath(OUT, "DC3-n=$(n)-m=$(m).npz")
 
 using LMEADMM   # src/metrics.jl: gap, violation, feasibility for every method
@@ -82,46 +91,81 @@ function ground_truth(A, b)
     return J
 end
 
-function solve_one(meth, para, mgrad)
-    if meth == "IPOPT"
-        w, t, _ = JuMP_solver("Ipopt", para, 1e-2, callback_struct())   # stopped by Ipopt_callback_BM
-        return w, t, 0
-    end
-    it = Ref(0)
-    sol, t, _ = sLME_ADMM(para, mgrad, (args...) -> (it[] = args[6]; sLME_ADMM_callback(args...));
-                          tol = SLME_TOL * var_scale(para))
-    return sol[1:n], t, it[]
-end
-
-function run_method(meth, gopt, gname, A, b, Jopt, mgrad)
+function save_result(meth, gname, A, b, Jopt, W, t_ms, iters)
     path = res_file(meth, gname, n, m)
-    (is_current(path) && !FORCE) && return
-    global max_opt_gap = gopt
-    global J_opt = Jopt[1]
-    solve_one(meth, instance(A, b, 1), mgrad)                # compile, not recorded
-    t_ms = zeros(N_SAMPLES); W = zeros(N_SAMPLES, n); iters = zeros(Int, N_SAMPLES)
-    for k in 1:N_SAMPLES
-        global J_opt = Jopt[k]
-        w, t, iters[k] = solve_one(meth, instance(A, b, k), mgrad)
-        W[k, :] = w
-        t_ms[k] = 1e3t
-        k % 5 == 0 && GC.gc()
-    end
     s = score_entr_max(A, b, W, Jopt)
+    mkpath(dirname(path))
     npzwrite(path, Dict("W" => W, "time_ms" => t_ms, "iterations" => iters, "gap_pct" => s.gap_pct, "max_viol" => s.max_viol,
                         "feasible" => s.feasible, "metrics_version" => METRICS_VERSION, "oracle_assisted" => true))
     @printf("n=%d m=%d %-9s g_opt=%s%%: time %.3f (%.3f) ms, gap %.3g (%.3g) %%, feasible %.3f\n",
             n, m, meth, gname, mean(t_ms), maximum(t_ms), mean(s.gap_pct), maximum(s.gap_pct), mean(s.feasible))
 end
 
+function run_ipopt(gopt, gname, A, b, Jopt)
+    is_current(res_file("IPOPT", gname, n, m)) && !FORCE && return
+    global max_opt_gap = gopt
+    global J_opt = Jopt[1]
+    JuMP_solver("Ipopt", instance(A, b, 1), 1e-2, callback_struct())   # compile, not recorded
+    t_ms = zeros(N_SAMPLES); W = zeros(N_SAMPLES, n)
+    for k in 1:N_SAMPLES
+        global J_opt = Jopt[k]
+        w, t, _ = JuMP_solver("Ipopt", instance(A, b, k), 1e-2, callback_struct())   # stopped by Ipopt_callback_BM
+        W[k, :] = w
+        t_ms[k] = 1e3t
+        k % 5 == 0 && GC.gc()
+    end
+    save_result("IPOPT", gname, A, b, Jopt, W, t_ms, zeros(Int, N_SAMPLES))
+end
+
+# sLME-ADMM runs once per instance, to the strictest g_opt.  Each g_opt gets the time, iteration
+# count and solution of the first iteration where the gap is below it and the residual below its
+# tolerance, so a looser g_opt is never reported slower than a stricter one.
+function slme_one!(T, W, IT, k, para, mgrad)
+    tol, scale = SLME_TOL * var_scale(para), var_scale(para)
+    got = falses(length(GOPTS)); last_it = Ref(0)
+    cb = (z, w, α, v, β, i, J, elapsed) -> begin
+        last_it[] = i
+        gap = 100abs(J - J_opt)/abs(J_opt)
+        res = max(maximum(abs(x - y) for (x, y) in zip(w, v)), maximum(abs(x - y) for (x, y) in zip(v, z)))
+        for (j, (g, _)) in enumerate(GOPTS)
+            if !got[j] && gap < g && res < tol
+                got[j] = true; T[k, j] = 1e3elapsed; IT[k, j] = i
+                @views W[k, :, j] .= v[1:n] ./ scale
+            end
+        end
+        return sLME_ADMM_callback(z, w, α, v, β, i, J)
+    end
+    sol, t, _ = sLME_ADMM(para, mgrad, cb; tol = tol)
+    for j in findall(!, got)                                 # max_iter reached before this g_opt
+        T[k, j] = 1e3t; IT[k, j] = last_it[]; W[k, :, j] .= sol[1:n]
+    end
+end
+
+function run_slme(A, b, Jopt, mgrad)
+    all(is_current(res_file("sLME-ADMM", gname, n, m)) for (_, gname) in GOPTS) && !FORCE && return
+    global max_opt_gap = minimum(first, GOPTS)
+    G = length(GOPTS)
+    T = zeros(N_SAMPLES, G); W = zeros(N_SAMPLES, n, G); IT = zeros(Int, N_SAMPLES, G)
+    global J_opt = Jopt[1]
+    slme_one!(T, W, IT, 1, instance(A, b, 1), mgrad)         # compile, overwritten below
+    for k in 1:N_SAMPLES
+        global J_opt = Jopt[k]
+        slme_one!(T, W, IT, k, instance(A, b, k), mgrad)
+        k % 5 == 0 && GC.gc()
+    end
+    for (j, (_, gname)) in enumerate(GOPTS)
+        save_result("sLME-ADMM", gname, A, b, Jopt, W[:, :, j], T[:, j], IT[:, j])
+    end
+end
+
 function worker()
     A, b = instances()
     Jopt = ground_truth(A, b)
     "--instances-only" in ARGS && return
-    mgrad = gradient_struct(model, s_mb, 1)
-    for meth in METHODS, (gopt, gname) in GOPTS
-        run_method(meth, gopt, gname, A, b, Jopt, mgrad)
+    for (gopt, gname) in GOPTS
+        run_ipopt(gopt, gname, A, b, Jopt)
     end
+    run_slme(A, b, Jopt, gradient_struct(model, s_mb, 1))
 end
 
 # ---------------------------------------------------------------------------
@@ -130,7 +174,7 @@ function run_missing()
     for (nn, mm) in SIZES
         need = [gt_file(nn, mm); [res_file(me, g, nn, mm) for me in METHODS for (_, g) in GOPTS]]
         (FORCE || !isfile(need[1]) || !all(is_current, need[2:end])) || continue
-        cmd = `$(Base.julia_cmd()) --project=$REPO --threads=auto $(@__FILE__) worker $nn $mm`
+        cmd = `$(Base.julia_cmd()) --project=$REPO --threads=auto $(@__FILE__) worker $nn $mm $PASS_ARGS`
         FORCE && (cmd = `$cmd --force`)
         run(cmd)
     end
@@ -195,7 +239,8 @@ function render()
 
     Generated by `experiments/entr_max/table.jl` (IPOPT, sLME-ADMM) and
     `experiments/entr_max/table.py` (DC3) from the data in this folder — see
-    [README.md](README.md) for what each number means.  Solving time in ms and
+    [README.md]($(isempty(TAG) ? "" : "../")README.md) for what each number means.$(MODEL_ARG === nothing ? "" :
+    "  sLME-ADMM uses the ICNN `$(MODEL_ARG)`; IPOPT and DC3 are the runs in the parent folder.")  Solving time in ms and
     optimality gap in %, as mean (max) over $(N_SAMPLES) instances per row; **bold** is
     the lowest mean time in the row; `[k it.]` is sLME-ADMM's mean number of
     iterations; — means the data has not been produced yet.  Constr. viol. is the
@@ -210,7 +255,8 @@ function render()
     |---|---|---|---|---|---|
     $(join(rows, "\n"))
     """
-    write(joinpath(OUT, "entr_max_table.md"), md)
+    mkpath(OUT_TAG)
+    write(joinpath(OUT_TAG, "entr_max_table.md"), md)
     println(md)
 end
 

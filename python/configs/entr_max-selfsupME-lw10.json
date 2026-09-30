@@ -1,8 +1,8 @@
 {
   "train_data": "data/entr_max/training/maxEntropy-admm20-1144-rho=1.0-train.npz",
   "test_data": "data/entr_max/training/maxEntropy-admm20-1144-rho=1.0-test.npz",
-  "output": "models/entr_max/mEntropy-admm20-1144-rho=1-16.npz",
-  "_note": "data from experiments/entr_max/data_gen_admm.jl 1,1,4,4 (first 20% of the ADMM iterations, samples of (100,1) (100,10) (1000,10) (1000,100) in shares 1:1:4:4); value + 5 * gradient labels",
+  "output": "models/entr_max/mEntropy-selfsupME-lw10-admm20-1144-rho=1-16.npz",
+  "_note": "self-supervised prox term + ME labels: loss = mean T(p) + 10 * mean (ICNN(q) - ME label)^2, p = q - grad ICNN(q)/rho, T(p) = f(p) + rho/2 |p - q|^2; no gradient labels, admm20-1144 data",
   "weight_act": "relu",
   "keep_best": true,
   "export_act": "relu",
@@ -13,10 +13,14 @@
       16
     ],
     "lr": 0.001,
-    "grad_weight": 5.0,
     "l2_reg": 0,
     "batch_size": 256,
     "epochs": 5000,
-    "seed": 0
+    "seed": 0,
+    "label_weight": 10.0
+  },
+  "self_supervised": {
+    "objective": "entr_max",
+    "S0": 2000.0
   }
 }

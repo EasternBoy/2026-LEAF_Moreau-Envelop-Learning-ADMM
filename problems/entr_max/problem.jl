@@ -35,5 +35,5 @@ function data_opt(n::Int, m::Int)
 end
 
 @inbounds function get_objective(data::data_opt, w::Vector{FloatType})
-    return sum(data.cost_func.(w))
+    return sum(data.cost_func, w)
 end

@@ -53,7 +53,8 @@ function sLME_ADMM_callback(
     v::VecOrMat{FloatType},
     β::VecOrMat{FloatType},
     iter::Int,
-    J::FloatType
+    J::FloatType,
+    elapsed::Real = 0.0      # seconds since sLME_ADMM started its timer (used by table.jl)
 )
     opt_gap = 100abs(J - J_opt)/abs(J_opt) #+ 1e9norm(w .- v, Inf) #Terminate by optimality gap
 

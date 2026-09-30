@@ -1,8 +1,8 @@
 # The learned Moreau envelope: an input-convex neural network (ICNN) read from the
-# .json written by python/train.py, and its gradient with preallocated buffers.
+# .json or .npz written by python/train.py, and its gradient with preallocated buffers.
 # Part of the LMEADMM module (src/LMEADMM.jl).
 #
-#   rho, mp = load_model("models/<p>/<name>.json")
+#   rho, mp = load_model("models/<p>/<name>.json")   # or .npz
 #   model   = ICNN(mp)
 #   mgrad   = gradient_struct(model, nbatch, dim)   # ∇ of the ICNN at a (dim, nbatch) input
 #
@@ -35,12 +35,7 @@ end
 
 # dest += m1 * m2, two implementations: BLAS (entr_max, mpc) and an explicit loop
 # (power_grid, mvee).  They round differently, so each problem keeps the one it used.
-@inline function mul_add!(dest, m1, m2)
-    buff = copy(dest)
-    mul!(buff, m1, m2)
-    dest .+= buff
-    return dest
-end
+@inline mul_add!(dest, m1, m2) = mul!(dest, m1, m2, true, true)   # in place, no temporary
 
 @inline function mmul_add_matrix!(dest, src1, src2)
     rows = size(dest, 1)
@@ -53,6 +48,7 @@ end
 
 # ---------------------------------------------------------------------------
 function load_model(fname::String)
+    endswith(fname, ".npz") && return load_model_npz(fname)
     data   = JSON3.read(fname)
     vecf64 = (Vector{FloatType} ∘ vec)
     model = (
@@ -64,6 +60,21 @@ function load_model(fname::String)
         v = vecf64(data["v"])
     )
     return FloatType(data["rho"]), model
+end
+
+"A model saved as .npz by python/train.py: U1.., W1.., b1.. per layer, v, a, c, rho."
+function load_model_npz(fname::String)
+    data = npzread(fname)
+    L    = count(k -> occursin(r"^U\d+$", k), keys(data))
+    model = (
+        U = [Matrix{FloatType}(data["U$i"]) for i in 1:L],
+        W = [Matrix{FloatType}(data["W$i"]) for i in 1:L],
+        a = Vector{FloatType}(data["a"]),
+        b = [Vector{FloatType}(data["b$i"]) for i in 1:L],
+        c = FloatType(data["c"][]),
+        v = Vector{FloatType}(data["v"])
+    )
+    return FloatType(data["rho"][]), model
 end
 
 function convert_to_matrix(L)
@@ -188,17 +199,19 @@ column_chunk(g::gradient_struct) = size(g.grad_x_buf, 2)
 # the end of the input (it may overlap the previous chunk).
 
 # Chunks of a vector: `local_gradients` built with `gradient_struct(model, s_mb, 1)` or `(model, 1, s_mb)`.
-@inbounds function mini_batch(local_gradients::NTuple, batch::Vector{FloatType})
+# mini_batch! writes the gradient into `out` (no allocation); mini_batch returns a new vector.
+@inbounds function mini_batch!(out::AbstractVector{FloatType}, local_gradients::NTuple, batch::AbstractVector{FloatType})
     s_mb      = vector_chunk(local_gradients[1])
     data_size = length(batch)
     n_mb      = div(data_size - 1, s_mb) + 1
-    out       = copy(batch)
     @threads for i in 1:n_mb
         r = i == n_mb ? ((data_size - s_mb + 1):data_size) : ((i-1)*s_mb+1:i*s_mb)
-        out[r] .= local_gradients[i](batch[r])
+        @views out[r] .= local_gradients[i](batch[r])
     end
     return out
 end
+
+mini_batch(local_gradients::NTuple, batch::Vector{FloatType}) = mini_batch!(similar(batch), local_gradients, batch)
 
 # Column chunks of a matrix: `local_gradients` built with `gradient_struct(model, s_mb, dim)`.
 @inbounds function mini_batch(local_gradients::NTuple, batch::AbstractMatrix)

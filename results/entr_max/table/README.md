@@ -19,6 +19,17 @@ python experiments/entr_max/table.py                 # DC3 + correction column (
 julia --project=. experiments/entr_max/evaluate.jl   # re-score every saved W (no solving)
 ```
 
+To benchmark another ICNN, pass `--model=<path> --tag=<name>` to `table.jl` (or `row.jl`):
+its sLME-ADMM runs and `entr_max_table.md` go to `<name>/`, IPOPT, DC3 and the ground truth
+are read from this folder.  The sLME-ADMM runs in this folder use the default ICNN of
+`problems/entr_max/utils.jl`, `models/entr_max/mEntropy-selfsupME-lw10-admm20-1144-rho=1-16.npz`
+(`python/configs/entr_max-selfsupME-lw10.json`: mean T(q − ∇ICNN(q)/ρ) + 10 · (ICNN(q) − ME label)²,
+with T(p) = f(p) + ρ/2 ‖p − q‖² and no gradient labels, on `experiments/entr_max/data_gen_admm.jl 1,1,4,4`
+data: the first 20 % of the ADMM iterations in shares 1:1:4:4 over the sizes).  The supervised
+alternative, `models/entr_max/mEntropy-admm20-1144-rho=1-16.npz` (`python/configs/entr_max.json`:
+value + 5 · gradient labels on the same data), is benchmarked with
+`--model=models/entr_max/mEntropy-admm20-1144-rho=1-16.npz --tag=admm20-1144`.
+
 Both table scripts read the data in this folder and only compute what is missing.
 `table.jl` renders `entr_max_table.md` from all the data present;
 `table.py` calls it at the end, so the table is complete after both
