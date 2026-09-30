@@ -32,7 +32,7 @@
     "batch_norm": true,
     "input_norm": true,
     "lr": 0.001,
-    "epochs": 800,
+    "epochs": 5000,
     "batch_size": 64,
     "soft_weight": 1.0,
     "soft_weight_eq_frac": 0.5,

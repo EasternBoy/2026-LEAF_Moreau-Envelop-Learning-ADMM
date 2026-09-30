@@ -14,15 +14,28 @@ if Sys.isapple()
     using AppleAccelerate
 end
 
+# Optional arguments (the defaults are the constants below):
+#   julia --project=. --threads=8 experiments/power_grid/table.jl [--N=96] [--gopt=0.1] [--model=<path>.json --tag=<tag>]
+# --model replaces the ICNN of problems/power_grid/setup.jl; its results go to
+# results/power_grid/table/<tag>/gap=<g_opt>/ instead of results/power_grid/table/gap=<g_opt>/.
+function table_arg(name, default)
+    i = findfirst(a -> startswith(a, "--$name="), ARGS)
+    return i === nothing ? default : String(split(ARGS[i], "="; limit = 2)[2])
+end
+
 const FloatType = Float64
 const tol = 1e-2
 const admm_tol = 1e-2
 const admm_rho = 1.
-const smel_state_scale = 50.0 
+const smel_state_scale = 50.0
 const nsamples = 1000
-const g_opt = 0.1
+const g_opt = parse(Float64, table_arg("gopt", "0.1"))
 const s_mb = 24
-const output_dir = joinpath(repo_root, "results", "power_grid", "table", "gap=$(g_opt)")
+const model_tag = table_arg("tag", "")
+const POWER_GRID_MODEL = table_arg("model", "models/power_grid/neco_mpc-rho=1.json")
+table_arg("model", nothing) !== nothing && isempty(model_tag) &&
+    error("--model needs --tag, so that its results do not overwrite the default model's")
+const output_dir = joinpath(repo_root, "results", "power_grid", "table", model_tag, "gap=$(g_opt)")
 const seed = 20262309
 const gc_every = 1
 const max_iter = 1000
@@ -48,7 +61,7 @@ include(joinpath(power_grid_problem_dir, "admm.jl"))
 include(joinpath(power_grid_problem_dir, "lme_admm.jl"))
 
 # Select the benchmark horizon without changing energy_mag() for other experiments.
-N = 96
+N = parse(Int, table_arg("N", "96"))
 const input_tag = "N=$(N)"
 const power_table_input_dir = joinpath(repo_root, "results", "power_grid", "table", "instances")
 const input_file = joinpath(power_table_input_dir, "test_instances_$(input_tag).npz")
@@ -266,7 +279,7 @@ function main()
     end
     runners = [name in ("IPOPT", "MadNLP") ? nlp_runner(name, target) : admm_runner(name, target) for name in methods]
     metadata = Dict("N" => N, "rho" => admm_rho, "primary_scalar_variables" => dim * N,
-        "smel_state_scale" => smel_state_scale,
+        "smel_state_scale" => smel_state_scale, "icnn_model" => POWER_GRID_MODEL,
         "case_tag" => case_tag, "source_instances_file" => input_file,
         "reference_instances_file" => basename(files[1]),
         "results_file" => basename(files[2]), "summary_file" => basename(files[3]),

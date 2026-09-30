@@ -37,8 +37,8 @@ import torch
 from ..common.io_utils import REPO_ROOT
 from .problem import GridParams
 
-GEN_CSV = os.path.join(REPO_ROOT, "data", "micro_grid", "PV_48h_15-min_150kW_San_Diego.csv")
-LOAD_CSV = os.path.join(REPO_ROOT, "data", "micro_grid", "load_15min_max100kW_SanDiego_Building.csv")
+GEN_CSV = os.path.join(REPO_ROOT, "data", "power_grid", "micro_grid", "PV_48h_15-min_150kW_San_Diego.csv")
+LOAD_CSV = os.path.join(REPO_ROOT, "data", "power_grid", "micro_grid", "load_15min_max100kW_SanDiego_Building.csv")
 SPLIT_ID = {"train": 0, "valid": 1, "test": 2}
 
 

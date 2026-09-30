@@ -74,6 +74,18 @@ def init_icnn_params(
 WEIGHT_ACTS = {"relu": jax.nn.relu, "softplus": jax.nn.softplus}
 
 
+def learning_rate(lr: float, lr_decay: Optional[Dict[str, Any]] = None, steps_per_epoch: int = 1):
+    """Constant lr, or lr · decay_rate^(t / transition_steps) when lr_decay =
+    {"transition_steps": .., "decay_rate": .., "unit": "step" | "epoch", "staircase": false};
+    t counts optimizer steps, or epochs with unit = "epoch" (default "step")."""
+    if not lr_decay:
+        return lr
+    per = steps_per_epoch if lr_decay.get("unit", "step") == "epoch" else 1
+    return optax.exponential_decay(init_value=lr, transition_steps=lr_decay["transition_steps"] * per,
+                                   decay_rate=lr_decay["decay_rate"],
+                                   staircase=lr_decay.get("staircase", False))
+
+
 def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespace:
     """The jitted ICNN functions for one choice of weight projection (see the file header)."""
     act_p = WEIGHT_ACTS[weight_act]
@@ -169,6 +181,7 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         seed: int = 0,
         f: Optional[np.ndarray] = None,
         penalty_weight: float = 1.0,
+        lr_decay: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         bounded = f is not None
         key = jax.random.PRNGKey(seed)
@@ -179,7 +192,7 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         best_params = params
         best_val = jnp.inf
 
-        optimizer = optax.adamw(learning_rate=lr, weight_decay=l2_reg)
+        optimizer = optax.adamw(learning_rate=learning_rate(lr, lr_decay, -(-X.shape[0] // batch_size)), weight_decay=l2_reg)
         opt_state = optimizer.init(params)
         train_step = make_train_step(optimizer, bounded)
         extra = (grad_weight, penalty_weight, l2_reg) if bounded else (grad_weight,)
@@ -221,6 +234,7 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         seed: int = 0,
         y: Optional[np.ndarray] = None,
         label_weight: float = 0.0,
+        lr_decay: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Training without prox solves or gradient labels.  With p = x - ∇f_θ(x)/rho, the prox
         given by ∇ME = rho (x - prox(x)), the loss is
@@ -244,7 +258,7 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         arrays = [Xj] if y is None else [Xj, yj]
         params = init_icnn_params(key, n_in=n_in, widths=widths)
         best_params, best_val = params, jnp.inf
-        optimizer = optax.adamw(learning_rate=lr, weight_decay=l2_reg)
+        optimizer = optax.adamw(learning_rate=learning_rate(lr, lr_decay, -(-X.shape[0] // batch_size)), weight_decay=l2_reg)
         opt_state = optimizer.init(params)
 
         @jax.jit

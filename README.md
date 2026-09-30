@@ -30,7 +30,7 @@ Every `problems/<p>/` uses the same file names:
 Run every script from the repository root (the scripts call `Pkg.activate(".")`
 and use paths relative to the root).
 
-# Run scripts
+# Run scripts: entr_max
 ## Whole table
 Solving-time / optimality-gap table for the maximum-entropy cone program:
 the IPOPT and sLME-ADMM columns.  The DC3 + correction column is filled by
@@ -78,3 +78,60 @@ and the ME labels fix the value.  To benchmark another ICNN in place of the defa
 
 Its sLME-ADMM runs and table go to results/entr_max/table/<tag>/; IPOPT, DC3 and the ground
 truth are read from results/entr_max/table.  row.jl takes the same --model and --tag.
+
+
+# Run scripts: power_grid
+Economic MPC of a PV + BESS microgrid, benchmarked at horizons N = 96 and N = 192 over
+1000 instances per horizon. The load and PV forecasts are fixed (from
+data/power_grid/micro_grid/); only the initial BESS state of charge x0 varies,
+drawn uniformly from [0.25, 0.75].
+
+The horizon and target gap are constants at the top of each script, not
+command-line options; set them before running:
+
+| script | constant | default |
+|---|---|---|
+| `experiments/power_grid/table.jl` | `N`, `g_opt` (%) | `96`, `0.1` |
+| `experiments/power_grid/table_benchmark.py` (also used by `train_table.py`) | `N` | `192` |
+| `experiments/power_grid/boxplot.py` | `G_OPT`, `HORIZONS` | `1.0`, `[96, 192]` |
+
+## Test instances
+Shared by the Julia methods and DC3:
+
+  python experiments/power_grid/generate_table_instances.py --N 96    # results/power_grid/table/instances/test_instances_N=96.npz
+
+## Julia methods (IPOPT, MadNLP, ADMM, MEL-ADMM, sMEL-ADMM)
+MEL-ADMM runs threaded mini-batches, so Julia needs more than one thread:
+
+  julia --project=. --threads=8 experiments/power_grid/table.jl
+
+This first solves IPOPT references (tol 1e-10) on every instance, then runs each
+method until `g_opt` is reached. Outputs go to results/power_grid/table/gap=<g_opt>/:
+`results_*.csv` (per instance), `summary_*.csv`, `metadata_*.json`,
+`ipopt_references_*.npz` and the rendered `table_*.md`. sMEL-ADMM uses the ICNN
+loaded in problems/power_grid/setup.jl, models/power_grid/neco_mpc-rho=1.json.
+
+## DC3 + correction
+Train one network per horizon (N comes from `table_benchmark.N`), then evaluate it
+on the same instances, one instance per call on CPU, with at most 200 correction steps:
+
+  python experiments/power_grid/train_table.py --tag table-N96
+  python experiments/power_grid/table_benchmark.py --checkpoint DC3/results/power_grid-table-N96/checkpoint.pt
+
+The gap is measured against CLARABEL (tol 1e-9) solved from the same inputs, outside
+DC3's timing. Outputs: results/power_grid/table/dc3_clarabel_results_N=..csv and
+dc3_clarabel_summary_N=..json. DC3's settings are in DC3/power_grid/configs/default.json
+(see DC3/power_grid/README.md).
+
+## Figures
+  python experiments/power_grid/boxplot.py                          # gap / violation box plots, all methods incl. DC3 + correction
+  julia --project=. experiments/power_grid/convergence.jl           # results/power_grid/figures/OptGap_time.pdf
+  julia --project=. experiments/power_grid/figures.jl               # BESS time series (bess_timeseries.pdf)
+
+boxplot.py reads the Julia results for `G_OPT` and the DC3 files for both horizons,
+and writes to results/power_grid/figures/.
+
+## ICNN for the table
+  python python/train.py power_grid    # data/power_grid/training/eco_mpc-rho=1.0-{train,test}.npz → models/power_grid/neco_mpc-rho=1
+
+The training data comes from ADMM runs in experiments/power_grid/data_gen.jl.

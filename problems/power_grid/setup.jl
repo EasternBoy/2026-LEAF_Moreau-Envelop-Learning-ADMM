@@ -6,7 +6,8 @@ if !(@isdefined(GUROBI_ENV))
 end
 
 
-rho, mp = load_model("models/power_grid/neco_mpc-rho=1.json")
+# A script may set POWER_GRID_MODEL before including this file to use another ICNN.
+rho, mp = load_model(@isdefined(POWER_GRID_MODEL) ? POWER_GRID_MODEL : "models/power_grid/neco_mpc-rho=1.json")
 
 model = ICNN(
     mp.U[1], 
