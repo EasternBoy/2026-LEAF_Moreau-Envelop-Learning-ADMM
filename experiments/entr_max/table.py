@@ -42,9 +42,8 @@ N_WARMUP = 10
 DC3_VERSION = 4                # bump to invalidate stored DC3 solutions
 METRICS_VERSION = 4            # must equal METRICS_VERSION in src/metrics.jl
 
-# DC3 networks that already exist in DC3/results (see DC3/entr_max/README.md);
-# other sizes are trained with the settings of the config for the same n.
-EXISTING_TAGS = {(100, 10): "small", (1000, 100): "default"}
+# Every size has its DC3 network in DC3/results/entr_max-(n,m)=(<n>,<m>), trained with the
+# settings of the config for the same n.
 BASE_CONFIG = {100: "small.json", 1000: "default.json"}
 
 
@@ -73,7 +72,7 @@ def ensure_instances(n: int, m: int) -> None:
 
 
 def checkpoint(n: int, m: int, retrain: bool) -> dict:
-    tag = EXISTING_TAGS.get((n, m), f"table-n{n}-m{m}")
+    tag = f"(n,m)=({n},{m})"
     path = os.path.join(REPO, "DC3", "results", f"entr_max-{tag}", "checkpoint.pt")
     if os.path.exists(path) and not retrain:
         ck = torch.load(path, map_location="cpu", weights_only=False)

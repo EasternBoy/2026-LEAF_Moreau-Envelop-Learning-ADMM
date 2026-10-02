@@ -1,5 +1,5 @@
 {
-  "_comment": "Smaller size also benchmarked by the repository (results/entr_max/benchmark/maxEntropy-n=100m=10-*.npz). dc3.corr_lr / lr / soft_weight were selected by DC3/tune.py on the VALIDATION split only (see results/entr_max-tune-small/tune_results.json).",
+  "_comment": "Smaller size also benchmarked by the repository (results/entr_max/benchmark/maxEntropy-n=100m=10-*.npz). dc3.corr_lr / lr / soft_weight were selected by DC3/tune.py on the VALIDATION split only.",
   "problem": {
     "n": 100,
     "m": 10,

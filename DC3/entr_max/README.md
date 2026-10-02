@@ -128,16 +128,16 @@ objective and residuals agree with both.
 python -m DC3.validate --app cone                      # formulation + gradient checks
 
 # small configuration (n=100, m=10)
-python -m DC3.entr_max.train     --config DC3/entr_max/configs/small.json --tag small
-python -m DC3.entr_max.benchmark --config DC3/entr_max/configs/small.json --tag small
+python -m DC3.entr_max.train     --config DC3/entr_max/configs/small.json --tag '(n,m)=(100,10)'
+python -m DC3.entr_max.benchmark --config DC3/entr_max/configs/small.json --tag '(n,m)=(100,10)'
 
 # headline configuration (n=1000, m=100)
-python -m DC3.entr_max.train     --tag default
-python -m DC3.entr_max.benchmark --tag default
+python -m DC3.entr_max.train     --tag '(n,m)=(1000,100)'
+python -m DC3.entr_max.benchmark --tag '(n,m)=(1000,100)'
 
 # repository baselines on the same test instances (Ipopt + sLME-ADMM)
-julia --project=. DC3/julia/baselines_cone.jl DC3/results/entr_max-small
-python -m DC3.report --app entr_max --tag small
+julia --project=. DC3/julia/baselines_cone.jl 'DC3/results/entr_max-(n,m)=(100,10)'
+python -m DC3.report --app entr_max --tag '(n,m)=(100,10)'
 
 # hyper-parameter search on the validation split only
 python -m DC3.tune --app entr_max --config DC3/entr_max/configs/small.json \

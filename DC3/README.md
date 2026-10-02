@@ -68,10 +68,10 @@ julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default
 $PY -m DC3.report --app power_grid --tag default
 
 # cone program (small configuration)
-$PY -m DC3.entr_max.train     --config DC3/entr_max/configs/small.json --tag small
-$PY -m DC3.entr_max.benchmark --config DC3/entr_max/configs/small.json --tag small
-julia --project=. DC3/julia/baselines_cone.jl DC3/results/entr_max-small
-$PY -m DC3.report --app entr_max --tag small
+$PY -m DC3.entr_max.train     --config DC3/entr_max/configs/small.json --tag '(n,m)=(100,10)'
+$PY -m DC3.entr_max.benchmark --config DC3/entr_max/configs/small.json --tag '(n,m)=(100,10)'
+julia --project=. DC3/julia/baselines_cone.jl 'DC3/results/entr_max-(n,m)=(100,10)'
+$PY -m DC3.report --app entr_max --tag '(n,m)=(100,10)'
 ```
 
 Every config key can be overridden from the command line:

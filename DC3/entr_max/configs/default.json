@@ -1,5 +1,5 @@
 {
-  "_comment": "Revised, untuned DC3 adaptation: exact uniform initialization, smaller network, streamed training pool, completion-metric preconditioning. Requires new training; previous results apply only to legacy.json.",
+  "_comment": "Revised, untuned DC3 adaptation: exact uniform initialization, smaller network, streamed training pool, completion-metric preconditioning.",
   "problem": {
     "n": 1000,
     "m": 100,

@@ -78,10 +78,10 @@ In every run the first solve is a warm-up and is not recorded.
 **DC3 has no gap target.**  A DC3 time cell shows a number only if DC3 meets
 the row's `g_opt` on **every** instance (max gap ≤ `g_opt`) **and** is feasible
 on every instance (max violation ≤ 1e-4).  Otherwise it shows *unable to
-achieve*.  DC3 networks: (100, 10) and (1000, 100) reuse
-`DC3/results/entr_max-small` and `-default`.  (100, 1) and (1000, 10) are
-trained by `table.py`, with the settings of `small.json` (n = 100) or
-`default.json` (n = 1000), into `DC3/results/entr_max-table-n{n}-m{m}`.
+achieve*.  DC3 networks: one per size, in
+`DC3/results/entr_max-(n,m)=(<n>,<m>)`, trained with the settings of
+`small.json` (n = 100) or `default.json` (n = 1000); `table.py` trains a
+missing one.
 
 **Opt. gap rows.**  IPOPT is the ground truth, so its gap is 0.  sLME-ADMM
 shows the gap of its `g_opt = 0.1 %` run.  DC3 shows the gap of its only run,
