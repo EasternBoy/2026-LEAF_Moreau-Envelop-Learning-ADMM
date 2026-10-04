@@ -70,6 +70,7 @@ struct MPCData_eco
     a::FloatType
     x_min::FloatType
     x_max::FloatType
+    x_end_min::FloatType   # terminal constraint x_N >= x_end_min
     u_min::FloatType
     u_max::FloatType
     x0::FloatType
@@ -94,6 +95,7 @@ function energy_mag()
     a     = 50.
     x_min = 0.2
     x_max = 0.8
+    x_end_min = 0.5
     u_max = 700
     u_min = -700
     x0    = 0.5
@@ -112,5 +114,5 @@ function energy_mag()
     cost_func = eco_mpc(r_ec, r_df, r_op, eta, dT, N, a)
 
     # available power supply
-    return MPCData_eco(A, B, r_ec, r_df, r_op, eta, BESS, dT, a, x_min, x_max, u_min, u_max, x0, dim, N, load_forecast, gen_forecast, rho, cost_func)
+    return MPCData_eco(A, B, r_ec, r_df, r_op, eta, BESS, dT, a, x_min, x_max, x_end_min, u_min, u_max, x0, dim, N, load_forecast, gen_forecast, rho, cost_func)
 end

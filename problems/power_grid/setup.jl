@@ -21,6 +21,7 @@ mpc_data  = energy_mag()
 N   = mpc_data.N
 dim = mpc_data.dim
 
+# Optimum of the nominal instance x0 = 0.5 only; with x_N >= x_end_min it depends on x0.
 Jopt::FloatType = 36479.1
 if N == 192
     Jopt = 73117.5

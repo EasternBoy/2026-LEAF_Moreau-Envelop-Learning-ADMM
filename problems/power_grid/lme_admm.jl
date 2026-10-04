@@ -16,10 +16,10 @@ function eco_solution_feasible(data, v, init, load, gen, tol)
     all(>(0), p) || return false
     previous = vcat(init, x[1:end-1])
     eq = max(maximum(abs, data.A .* previous .+ data.B .* u .- x),
-             abs(x[end] - init), maximum(abs, u .+ m .+ gen .- load .- p))
+             maximum(abs, u .+ m .+ gen .- load .- p))
     viol = max(maximum(u .- data.u_max), maximum(data.u_min .- u),
                maximum(x .- data.x_max), maximum(data.x_min .- x),
-               init - data.x_max, data.x_min - init, 0.0)
+               data.x_end_min - x[end], init - data.x_max, data.x_min - init, 0.0)
     return eq <= tol && viol <= tol
 end
 
@@ -116,9 +116,12 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
         u_min = data.u_min,
         u_max = data.u_max,
         x_min = data.x_min,
-        x_max = data.x_max
+        x_max = data.x_max,
+        x_end_min = data.x_end_min
         return @inbounds function solver(init::FloatType, load_fc::Vector{FloatType}, gen_fc::Vector{FloatType}, callback = nothing; 
-            tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false)
+            tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false,
+            feas_tol::FloatType = tol,  # feasibility tolerance of the returned v
+            γ::FloatType = 1.0)         # over-relaxation of the z-update (1 = none)
 
             for state in (z, w, v, α, β, buffer1, buffer2)
                 fill!(state, 0.)
@@ -134,6 +137,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 @views z[1:dim, :] .= buffer1[1:dim, :] .-
                     mini_batch(local_gradients, buffer1[1:dim, :])./ρ
                 @views copyto!(z[dim+1, :], buffer1[dim+1, :])  # no learning for state variable
+                γ == 1 || (@. z = γ * z + (1 - γ) * v)
 
                 # ==== v-update ====
                 # Use the equality constraints in v-update
@@ -147,6 +151,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 @views clamp!(w[2,:], u_min, u_max)
                 @views clamp!(w[3,:], 0.,    Inf)
                 @views clamp!(w[4,:], x_min, x_max)
+                w[4,N] = clamp(w[4,N], max(x_min, x_end_min), x_max)  # terminal bound
 
                 ## ============== Calculate dual variables and check termination ===========
                 @. buffer1  = w - v
@@ -163,7 +168,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 end
 
                 residual = max(maximum(abs, buffer1), maximum(abs, buffer2))
-                feasible = eco_solution_feasible(data, v, init, load_fc, gen_fc, tol)
+                feasible = eco_solution_feasible(data, v, init, load_fc, gen_fc, feas_tol)
                 # A callback cannot bypass consensus or returned-solution feasibility.
                 TERMINATION_STATUS = residual < tol && feasible &&
                                      (callback === nothing || CALL_BACK_STATUS)

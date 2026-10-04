@@ -179,8 +179,8 @@ function aux_solver_eco(solver_name::String, mpc_para::MPCData_eco)
         @constraint(model, x[i+1] == x[i] -  dT*u[i+1]/BESS)
     end
 
-    @constraint(model, x[N] == x0)    #End constraint
-    @constraint(model, x[0] == x0)    #End constraint
+    @constraint(model, x[N] >= mpc_para.x_end_min)    #End constraint
+    @constraint(model, x[0] == x0)    #Initial state
 
     @constraint(model, u + m + generator - load - p .== 0) #Power flow
 
@@ -325,8 +325,8 @@ function aux_solver_eco_data(solver_name::String, mpc_para::MPCData_eco)
         @constraint(model, x[i+1] == x[i] -  dT*u[i+1]/BESS)
     end
 
-    @constraint(model, x[N] == x0)    #End constraint
-    @constraint(model, x[0] == x0)    #End constraint
+    @constraint(model, x[N] >= mpc_para.x_end_min)    #End constraint
+    @constraint(model, x[0] == x0)    #Initial state
 
     @constraint(model, u + m + generator - load - p .== 0) #Power flow
 

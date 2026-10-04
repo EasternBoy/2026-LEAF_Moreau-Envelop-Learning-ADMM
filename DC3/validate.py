@@ -124,8 +124,8 @@ def validate_power(N=96, n_inst=4, seed=0):
     check("generic solve == hand-derived closed form",
           float((Yg - Yc).abs().max()) < 1e-8, f"max abs diff {float((Yg-Yc).abs().max()):.2e}")
 
-    # cond(A_D) ~ 5.6e4, so the ~1e-12 equality residual of the conic solver is
-    # amplified to ~1e-7 when the solution is re-completed from its partial part.
+    # The ~1e-12 equality residual of the conic solver is amplified by cond(A_D)
+    # when the solution is re-completed from its partial part.
     _completion_and_gradient_checks(prob, params, comp, Y, dt,
                                     perturb=1e-2, round_trip_tol=1e-5)
 
@@ -133,12 +133,10 @@ def validate_power(N=96, n_inst=4, seed=0):
 
 
 def _closed_form_completion(prob, params, Z):
-    """x_k = x0 + B sum_{i<=k} u_i ; u_N = -sum_{i<N} u_i ; m = load-gen-u+p."""
+    """x_k = x0 + B sum_{i<=k} u_i ; m = load-gen-u+p  (A = 1)."""
     N = prob.N
-    u_head = Z[:, : N - 1]
-    p = Z[:, N - 1 :]
-    u_last = -u_head.sum(dim=1, keepdim=True) * (1.0)          # A = 1  =>  sum u = 0
-    u = torch.cat([u_head, u_last], dim=1)
+    u = Z[:, :N]
+    p = Z[:, N:]
     x = params.x0.unsqueeze(1) + prob.Bd * torch.cumsum(u, dim=1)
     m = params.load - params.gen - u + p
     return torch.cat([m, u, p, x], dim=1)

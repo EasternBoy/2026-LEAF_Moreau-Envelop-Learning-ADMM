@@ -5,7 +5,9 @@
 # The problems differ in three training choices, selected with make_icnn / train_icnn:
 #   weight_act  "relu" (entr_max, mpc) or "softplus" (power_grid, mvee): the projection act_p
 #   keep_best   return the parameters with the best validation objective (entr_max, mpc)
-#               or those of the last epoch (power_grid, mvee)
+#               or those of the last epoch (power_grid, mvee).  Given val_data = (X, y, g),
+#               train_icnn scores that validation set every val_every epochs; otherwise the
+#               objective is scored on the first 1024 training samples
 #   f           lower-bound targets: adds penalty_weight * mean(relu(f_pred - f)) and an
 #               explicit L2 term l2_reg * ||params||² to the loss (mvee)
 
@@ -182,15 +184,24 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         f: Optional[np.ndarray] = None,
         penalty_weight: float = 1.0,
         lr_decay: Optional[Dict[str, Any]] = None,
+        val_data: Optional[tuple] = None,
+        val_every: int = 10,
     ) -> Dict[str, Any]:
         bounded = f is not None
         key = jax.random.PRNGKey(seed)
         arrays = [jnp.asarray(a, dtype=jnp.float32) for a in ((X, y, g, f) if bounded else (X, y, g))]
+        if val_data is not None:   # separate validation set (X, y, g)
+            val_arrays = [jnp.asarray(a, dtype=jnp.float32) for a in val_data]
+            print(f"training on {X.shape[0]} samples, validating on {val_arrays[0].shape[0]} samples every {val_every} epochs")
+        else:
+            val_arrays = [a[:1024] for a in arrays]
+            val_every = max(1, epochs // 10)
         Xj, yj, gj = arrays[:3]
+        Xv, yv, gv = val_arrays[:3]
 
         params = init_icnn_params(key, n_in=n_in, widths=widths)
         best_params = params
-        best_val = jnp.inf
+        best_val, best_ep = jnp.inf, 0
 
         optimizer = optax.adamw(learning_rate=learning_rate(lr, lr_decay, -(-X.shape[0] // batch_size)), weight_decay=l2_reg)
         opt_state = optimizer.init(params)
@@ -202,23 +213,25 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
             for batch in batch_iterator(arrays, batch_size, it_key):
                 params, opt_state, loss, aux = train_step(params, opt_state, *batch, *extra)
 
-            if ep % max(1, epochs // 10) == 0 or ep == 1:
-                with jax.disable_jit():
-                    yp = batched_forward(params, Xj[:1024])
-                    gp = batched_grad_wrt_x(params, Xj[:1024])
-                    vm = jnp.mean((yp - yj[:1024]) ** 2)
-                    gm = jnp.mean(jnp.sum((gp - gj[:1024]) ** 2, axis=1))
-                    val_obj = vm + grad_weight * gm
-                    msg = f"Epoch {ep:4d} | val MSE: {vm:.4e} | grad MSE: {gm:.4e}"
-                    if bounded:
-                        pm = jnp.mean(jax.nn.relu(yp - arrays[3][:1024]))
-                        val_obj = val_obj + penalty_weight * pm
-                        msg += f" | penalty MSE: {pm:.4e}"
-                    if keep_best and val_obj < best_val:
-                        best_val = val_obj
-                        best_params = jax.tree_util.tree_map(lambda x: x.copy(), params)
+            if ep % val_every == 0 or ep == 1 or ep == epochs:
+                yp = batched_forward(params, Xv)
+                gp = batched_grad_wrt_x(params, Xv)
+                vm = jnp.mean((yp - yv) ** 2)
+                gm = jnp.mean(jnp.sum((gp - gv) ** 2, axis=1))
+                val_obj = vm + grad_weight * gm
+                msg = f"Epoch {ep:4d} | val MSE: {vm:.4e} | grad MSE: {gm:.4e}"
+                if bounded:
+                    pm = jnp.mean(jax.nn.relu(yp - val_arrays[3]))
+                    val_obj = val_obj + penalty_weight * pm
+                    msg += f" | penalty MSE: {pm:.4e}"
+                if keep_best and val_obj < best_val:
+                    best_val, best_ep = val_obj, ep
+                    best_params = jax.tree_util.tree_map(lambda x: x.copy(), params)
+                if ep % max(1, epochs // 10) == 0 or ep == 1:
                     print(msg)
 
+        if keep_best:
+            print(f"best validation objective {float(best_val):.4e} at epoch {best_ep}")
         return best_params if keep_best else params
 
     def train_icnn_selfsup(

@@ -15,15 +15,15 @@ paper.**  The formulation below is a transcription of `problems/power_grid/probl
 
 Constants from `energy_mag()`: `N = 96`, `dT = 0.25 h`, `A = 1`,
 `B = −dT/BESS = −5·10⁻⁴` (`BESS = 500`), `r_ec = 0.1`, `r_df = 10`,
-`r_op = 19.19`, `η = 0.8`, `a = 50`, `x∈[0.2, 0.8]`, `u∈[−700, 700]`.
+`r_op = 19.19`, `η = 0.8`, `a = 50`, `x∈[0.2, 0.8]`, `x_N ≥ 0.5`, `u∈[−700, 700]`.
 
 | | |
 |---|---|
 | decision variables | `m_k` grid import, `u_k` BESS power, `p_k` delivered power (`k = 1..N`), `x_k` state of charge (`k = 0..N`) |
 | instance parameters | `x0`, `load_{1..N}`, `gen_{1..N}` |
 | objective | `Σ_k r_ec·dT·(m_k + (1−η)/(2√η)·\|u_k\|) + r_op·max(m_k,0) + r_df·max(a/p_k − 1, 0)` |
-| equalities | `x_k = A x_{k−1} + B u_k`; `x_0 = x0`; `x_N = x0`; `u_k + m_k + gen_k − load_k − p_k = 0` |
-| inequalities | `u_min ≤ u_k ≤ u_max`, `p_k ≥ 0`, `x_min ≤ x_k ≤ x_max` (`m` is free) |
+| equalities | `x_k = A x_{k−1} + B u_k`; `x_0 = x0`; `u_k + m_k + gen_k − load_k − p_k = 0` |
+| inequalities | `u_min ≤ u_k ≤ u_max`, `p_k ≥ 0`, `x_min ≤ x_k ≤ x_max`, `x_N ≥ x_end_min = 0.5` (`m` is free) |
 | domain | `p_k > 0` (needed by `a/p_k`) |
 
 The JuMP model writes the three non-smooth terms in epigraph form
@@ -34,7 +34,9 @@ equals the closed form above at the optimum; that closed form is also the
 **Verified:** Ipopt on the nominal instance (`x0 = 0.5`, first 96 CSV samples)
 gives `J = 36479.1113`, matching the hard-coded `Jopt = 36479.1` in
 `problems/power_grid/setup.jl`, and the Python objective reproduces it to
-1e-16 relative.
+1e-16 relative.  Because the battery need not return to `x0`, the optimum
+depends on `x0` (it is `46085.39` at `x0 = 0.25` and `26873.01` at `x0 = 0.75`);
+`Jopt` is valid for the nominal `x0 = 0.5` only.
 
 ## 2. DC3 adaptation
 
@@ -42,44 +44,40 @@ gives `J = 36479.1113`, matching the hard-coded `Jopt = 36479.1` in
 
 ```
 y = [ m_1..m_N | u_1..u_N | p_1..p_N | x_1..x_N ]      n_y  = 4N = 384
-A_eq y = b_eq(x0, load, gen)                            n_eq = 2N+1 = 193
-g(y) ≤ 0                                                n_ineq = 5N = 480
+A_eq y = b_eq(x0, load, gen)                            n_eq = 2N = 192
+g(y) ≤ 0                                                n_ineq = 5N+1 = 481
 ```
 
 `A_eq` is exactly the matrix `M` assembled by
 `problems/power_grid/utils.jl::dynamics_projection` (same row order: `N` dynamics
-rows, the terminal row, then `N` power-flow rows).
+rows, then `N` power-flow rows).  The terminal bound `x_N ≥ 0.5` is the last row
+of `g`.
 
-**Variable partition** (`n_y − n_eq = 2N−1 = 191` predicted variables):
+**Variable partition** (`n_y − n_eq = 2N = 192` predicted variables):
 
 ```
-P = { u_1 … u_{N−1} } ∪ { p_1 … p_N }
-D = { u_N } ∪ { x_1 … x_N } ∪ { m_1 … m_N }
+P = { u_1 … u_N } ∪ { p_1 … p_N }
+D = { x_1 … x_N } ∪ { m_1 … m_N }
 ```
 
 **Completion** is the generic linear solve `y_D = A_D⁻¹(b_eq − A_P y_P)`, but the
 partition was chosen so that it is block-triangular and interpretable:
 
 ```
-x_k = x0 + B·Σ_{i≤k} u_i        (k = 1..N−1)     forward recursion
-x_N = x0                                          terminal row
-u_N = (x_N − A x_{N−1})/B       ⟺  Σ_k u_k = 0 when A = 1
+x_k = x0 + B·Σ_{i≤k} u_i        (k = 1..N)       forward recursion
 m_k = load_k − gen_k − u_k + p_k                  power-flow rows
 ```
 
 `validate.py` asserts that the generic solve reproduces this closed form to
 2·10⁻¹³.
 
-**Assumption check.** `rank(A_eq) = 193 = n_eq` (full row rank) and `A_D` is
-invertible with **`cond(A_D) = 5.57·10⁴`**, `log|det A_D| = −7.6`.  The
-conditioning is not benign: a `2·10⁻¹²` equality residual in a reference
-solution is amplified to `3·10⁻⁷` when that solution is re-completed from its
-partial part.  It is reported in every result file, it is why this application
-runs in **float64**, and `partition.cond_warn` makes it a hard failure above a
-configurable threshold.
+**Assumption check.** `rank(A_eq) = 192 = n_eq` (full row rank) and `A_D` is
+invertible with `cond(A_D) = 1.23·10²`, `log|det A_D| = 0`, error amplification
+`‖A_D⁻¹A_P‖₂ = 1.41`.  It is reported in every result file, and
+`partition.cond_warn` makes it a hard failure above a configurable threshold.
 
 **Correction and why row scaling is needed.**  All inequalities are affine, so
-`G_eff = G_P − G_D·(A_D⁻¹A_P)` is a constant `480 × 191` matrix and the
+`G_eff = G_P − G_D·(A_D⁻¹A_P)` is a constant `481 × 192` matrix and the
 correction gradient `2·relu(g)ᵀ G_eff` is closed form.  However the row norms of
 `G_eff` span four orders of magnitude:
 
@@ -87,18 +85,15 @@ correction gradient `2·relu(g)ᵀ G_eff` is closed form.  However the row norms
 |---|---|---|
 | `u` bounds | 0.10 – 1.0 (after normalisation) | `∂u/∂u = 1` |
 | `p ≥ 0` | 1.0 | `p` is a partial variable |
-| `x` bounds | up to **2000** | `∂x/∂u = B = −5·10⁻⁴` |
-| `x_N` bounds | **0** | pinned by the terminal equality |
+| `x` bounds (incl. `x_N ≥ 0.5`) | up to **2000** | `∂x/∂u = B = −5·10⁻⁴` |
 
 With a single `corr_lr`, DC3's plain gradient step therefore either diverges on
 the power rows or makes no progress at all on the state-of-charge rows (measured:
 ≈2·10⁻⁷ movement per step, i.e. ~10⁶ steps to fix a 0.2 violation).  The
 implementation therefore rescales the rows of the *internal* residual by
 `1/‖G_eff,i‖` (normalised to a median of 1) — equivalent to measuring the SOC in
-kWh rather than as a fraction.  The two rows with an identically zero reduced
-gradient (the bounds on `x_N`, which the terminal equality pins to `x0`) are given
-weight 1 instead of `1/0`; amplifying their round-off would otherwise manufacture
-spurious violations of size `corr_eps`.
+kWh rather than as a fraction.  A row with an identically zero reduced gradient
+(none in the default partition) would be given weight 1 instead of `1/0`.
 **All reported metrics use the unscaled, original constraints.**
 Set `dc3.ineq_row_scale = "none"` to reproduce the unscaled behaviour.
 

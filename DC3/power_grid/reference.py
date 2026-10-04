@@ -35,7 +35,7 @@ def solve_instance(x0: float, load: np.ndarray, gen: np.ndarray,
 
     cons = [
         x[0] == x0,
-        x[N] == x0,
+        x[N] >= c["x_end_min"],
         x[1:] == Ad * x[:-1] + Bd * u,
         m + u + gen - load - p == 0,
         u >= c["u_min"], u <= c["u_max"],

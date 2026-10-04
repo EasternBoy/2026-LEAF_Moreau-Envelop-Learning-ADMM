@@ -61,6 +61,8 @@ def main():
     else:
         if cfg["lower_bound"]:
             train_args["f"] = data_train["org_f"]
+        if cfg.get("validate_on_test", False):   # select the best epoch on the test data
+            train_args["val_data"] = (Xva, yva, gva)
         params = icnn.train_icnn(Xtr, ytr, gtr, n_in=n, **train_args)
 
     report_test(icnn, params, Xva, yva, gva)

@@ -170,7 +170,7 @@ class LinearCompletion:
         self.cond_warn = cond_warn
 
         # Cache A_D^{-1} and A_D^{-1} A_P.  Both are tiny relative to the nets
-        # (n_eq = 1 for the cone program, 2N+1 = 193 for the eco-MPC).
+        # (n_eq = 1 for the cone program, 2N = 192 for the eco-MPC).
         A_p = A_eq[:, self.partial_vars]
         A_o = A_eq[:, self.other_vars]
         eye = torch.eye(self.n_eq, dtype=A_eq.dtype, device=A_eq.device)

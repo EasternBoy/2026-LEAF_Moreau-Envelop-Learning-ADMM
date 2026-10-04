@@ -2,9 +2,10 @@
   "train_data": "data/power_grid/training/power_grid_rho=1.0-admm20-train.npz",
   "test_data": "data/power_grid/training/power_grid_rho=1.0-admm20-test.npz",
   "output": "models/power_grid/power_grid_rho=1-admm20-expdecay.npz",
-  "_note": "data from experiments/power_grid/data_gen_admm.jl (first 20% of the sMEL-ADMM iterations with the exact prox, N = 96 and 192 in equal shares); same as power_grid-admm20.json but lr = 2e-3 \u00b7 0.9^(epoch/200)",
+  "_note": "data from experiments/power_grid/data_gen_admm.jl (first 20% of the sMEL-ADMM iterations with the exact prox, N = 96 and 192 in equal shares); same network as power_grid.json, lr = 2e-3 \u00b7 0.9^(epoch/200)",
   "weight_act": "softplus",
-  "keep_best": false,
+  "keep_best": true,
+  "validate_on_test": true,
   "export_act": "softplus",
   "lower_bound": false,
   "train": {
@@ -18,6 +19,7 @@
     "batch_size": 16,
     "epochs": 5000,
     "seed": 0,
+    "val_every": 10,
     "lr_decay": {
       "transition_steps": 200,
       "decay_rate": 0.9,

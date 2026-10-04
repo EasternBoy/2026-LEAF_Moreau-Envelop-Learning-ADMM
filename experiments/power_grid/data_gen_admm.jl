@@ -15,8 +15,8 @@
 #   x0 ~ Uniform(0.25, 0.75) (as generate_table_instances.py); drawn round-robin over the
 #   horizons until each has its share.
 # * The ADMM is the sMEL-ADMM iteration of problems/power_grid/lme_admm.jl (LME_ADMM_split with
-#   dynamics_projection(state_scale = 50), as table.jl) with the exact prox in place of the ICNN,
-#   run until its residual is below TOL and the iterate is feasible (as table.jl), or MAX_ITER.
+#   dynamics_projection(state_scale = 400), as table.jl) with the exact prox in place of the ICNN,
+#   run until its residual is below TOL and the iterate is feasible to FEAS_TOL (as table.jl), or MAX_ITER.
 #   If it takes K iterations, only the prox inputs q (columns [m, u, p]) of the first
 #   ceil(FIRST_FRAC·K) iterations are kept; duplicates are dropped (the first iterate is q = 0)
 #   and PER_INSTANCE samples are drawn from what is left.
@@ -44,16 +44,17 @@ const N_TEST       = 2000
 const PER_INSTANCE = 50
 const FIRST_FRAC   = 0.2
 const TOL          = 1e-2                # sMEL-ADMM residual tolerance of table.jl
+const FEAS_TOL     = 1e-4                # sMEL-ADMM feasibility tolerance of table.jl (smel_feas_tol)
 const MAX_ITER     = 1000
 const RHO          = 1.0
-const STATE_SCALE  = 50.0                # smel_state_scale of table.jl
+const STATE_SCALE  = 400.0               # smel_state_scale of table.jl
 const X0_LO, X0_HI = 0.25, 0.75
 
 "MPC data of energy_mag() with horizon N and ρ = RHO (as table.jl)."
 function horizon_data(N)
     d = energy_mag()
     c = eco_mpc(d.r_ec, d.r_df, d.r_op, d.η, d.dT, N, d.a)
-    return MPCData_eco(d.A, d.B, d.r_ec, d.r_df, d.r_op, d.η, d.BESS, d.dT, d.a, d.x_min, d.x_max,
+    return MPCData_eco(d.A, d.B, d.r_ec, d.r_df, d.r_op, d.η, d.BESS, d.dT, d.a, d.x_min, d.x_max, d.x_end_min,
                        d.u_min, d.u_max, d.x0, d.dim, N, d.load_forecast, d.gen_forecast, RHO, c)
 end
 
@@ -97,10 +98,11 @@ function admm_inputs(d::MPCData_eco, proj, x0)
         clamp!(@view(w[2, :]), d.u_min, d.u_max)
         clamp!(@view(w[3, :]), 0.0, Inf)
         clamp!(@view(w[4, :]), d.x_min, d.x_max)
+        w[4, N] = clamp(w[4, N], max(d.x_min, d.x_end_min), d.x_max)  # terminal bound
         α .+= w .- v
         β .+= v .- z
         residual = max(maximum(abs, w .- v), maximum(abs, v .- z))
-        residual < TOL && eco_solution_feasible(d, v, x0, load, gen, TOL) && break
+        residual < TOL && eco_solution_feasible(d, v, x0, load, gen, FEAS_TOL) && break
     end
     return Q
 end

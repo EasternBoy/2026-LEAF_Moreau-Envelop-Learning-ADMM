@@ -7,31 +7,32 @@ function dynamics_projection(mpc_data::MPCData_eco; state_scale::Real = 1.0)
         throw(ArgumentError("state_scale must be finite and positive"))
     # The following is for establishment of constraint Ms = b
     # Order of variables: s = [m, u, p, x]ᵀ  R^{4N)}
+    # Rows: N dynamics, then N power flow. The terminal bound x_N >= x_end_min is an
+    # inequality, so it is enforced by the box step of LME_ADMM_split, not here.
 
     A = mpc_data.A
     B = mpc_data.B
     N = mpc_data.N
     IN = Matrix{FloatType}(I, N, N)
 
-    Mu = vcat(B*IN, zeros(N)')
-    Mx = zeros(N+1, N)
-    Mx[N+1,N] =  1.
+    Mu = B*IN
+    Mx = zeros(N, N)
     Mx[1,1]   = -1.
     for i in 2:N
         Mx[i,i-1] = A
         Mx[i,i]   = -1.
     end
 
-    M = hcat(zeros(N+1, N), Mu, zeros(N+1, N), Mx)
+    M = hcat(zeros(N, N), Mu, zeros(N, N), Mx)
     M = vcat(M, hcat(IN, IN, -IN, zeros(N,N)))  
     scales = vcat(ones(FloatType, 3N), fill(FloatType(state_scale), N))
-    row_scales = vcat(fill(FloatType(state_scale), N+1), ones(FloatType, N))
+    row_scales = vcat(fill(FloatType(state_scale), N), ones(FloatType, N))
     Ms = spdiagm(0 => row_scales) * sparse(M) * spdiagm(0 => 1 ./ scales)
 
     # y = q - M'*(M*M')^(-1)*(M*q-b), equivalent to the full KKT solve.
     F = cholesky(Symmetric(Ms * Ms'))
     query = zeros(FloatType, 4N)
-    residual = zeros(FloatType, 2N+1)
+    residual = zeros(FloatType, 2N)
     result = zeros(FloatType, 4, N)
 
     let F  = F,
@@ -47,9 +48,8 @@ function dynamics_projection(mpc_data::MPCData_eco; state_scale::Real = 1.0)
             end
             mul!(residual, Ms, query)
             residual[1] += row_scales[1] * A * init
-            residual[N+1] -= row_scales[N+1] * init
             for k in 1:N
-                residual[N+1+k] -= load_fc[k] - gen_fc[k]
+                residual[N+k] -= load_fc[k] - gen_fc[k]
             end
             multipliers = F \ residual
             mul!(query, Ms', multipliers, -1.0, 1.0)
