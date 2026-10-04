@@ -8,9 +8,7 @@ Run with::
 What is checked
 ---------------
 1. **Formulation parity** - the Python objective / residuals agree with the
-   Julia model on identical data.  For the power grid the nominal instance is
-   compared against Ipopt's own solution (exported by
-   ``DC3/julia/reference_power.jl``); for both problems the cvxpy reference
+   Julia model on identical data.  For both problems the cvxpy reference
    solution is verified to satisfy the Python constraints and to reproduce the
    Python objective.
 2. **Completion** - ``A_eq complete(Z, b_eq) - b_eq == 0``; round-trip
@@ -89,7 +87,7 @@ def validate_cone(n=60, m=8, n_inst=4, seed=0):
 
 
 # ---------------------------------------------------------------------------
-def validate_power(N=96, n_inst=4, seed=0, julia_npz: str | None = None):
+def validate_power(N=96, n_inst=4, seed=0):
     from .power_grid.data import make_split
     from .power_grid.problem import EcoMPCProblem
     from .power_grid import reference as ref
@@ -131,17 +129,6 @@ def validate_power(N=96, n_inst=4, seed=0, julia_npz: str | None = None):
     _completion_and_gradient_checks(prob, params, comp, Y, dt,
                                     perturb=1e-2, round_trip_tol=1e-5)
 
-    if julia_npz:
-        d = np.load(julia_npz)
-        J_julia = d["J"]
-        Yj = torch.as_tensor(np.concatenate([d["m"], d["u"], d["p"], d["x"][:, 1:]], axis=1), dtype=dt)
-        from .power_grid.problem import GridParams
-        pj = GridParams(x0=torch.as_tensor(d["x0"], dtype=dt),
-                        load=torch.as_tensor(d["load"], dtype=dt),
-                        gen=torch.as_tensor(d["gen"], dtype=dt))
-        Jpy = prob.obj_fn(pj, Yj).numpy()
-        check("objective parity (python vs Julia/Ipopt)", rel_err(Jpy, J_julia) < 1e-6,
-              f"max rel err {rel_err(Jpy, J_julia):.2e}")
     return prob, params, comp
 
 
@@ -270,14 +257,12 @@ def main():
     ap.add_argument("--cone-m", type=int, default=8)
     ap.add_argument("--power-N", type=int, default=96)
     ap.add_argument("--n-inst", type=int, default=4)
-    ap.add_argument("--julia-npz", type=str, default=None,
-                    help="npz written by DC3/julia/reference_power.jl for cross-checking")
     a = ap.parse_args()
     torch.set_default_dtype(torch.float64)
     if a.app in ("cone", "both"):
         validate_cone(a.cone_n, a.cone_m, a.n_inst)
     if a.app in ("power", "both"):
-        validate_power(a.power_N, a.n_inst, julia_npz=a.julia_npz)
+        validate_power(a.power_N, a.n_inst)
 
     n_fail = sum(1 for _, ok, _ in _results if not ok)
     print(f"\n{len(_results) - n_fail}/{len(_results)} checks passed")

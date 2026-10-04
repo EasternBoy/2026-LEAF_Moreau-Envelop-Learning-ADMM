@@ -6,8 +6,8 @@
 
 which is the same problem the Julia scripts hand to Ipopt / Clarabel.  The
 Julia-side Ipopt reference (the repository's own ground truth, `tol = 1e-8`) is
-produced by ``DC3/julia/reference_cone.jl`` on the *same* saved instances; the
-benchmark cross-checks the two.
+run by ``experiments/dc3/baselines_cone.jl`` on the *same* saved instances; the
+report compares the two.
 """
 
 from __future__ import annotations

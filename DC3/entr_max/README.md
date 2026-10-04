@@ -118,8 +118,8 @@ identical instances.
 `reference.py` solves the exponential-cone form with cvxpy + **Clarabel** at
 `tol = 1e-9`.  The repository's own ground truth, Ipopt at `tol = 1e-8`
 (`JuMP_solver("Ipopt", para, 1e-8)`), is produced on the same instances by
-`DC3/julia/baselines_cone.jl`; `DC3/validate.py` checks that the Python
-objective and residuals agree with both.
+`experiments/dc3/baselines_cone.jl`; `DC3/validate.py` checks the Python
+objective and residuals against the cvxpy solution, and the report compares both with Ipopt.
 
 ## 5. Commands
 
@@ -136,7 +136,7 @@ python -m DC3.entr_max.train     --tag '(n,m)=(1000,100)'
 python -m DC3.entr_max.benchmark --tag '(n,m)=(1000,100)'
 
 # repository baselines on the same test instances (Ipopt + sLME-ADMM)
-julia --project=. DC3/julia/baselines_cone.jl 'DC3/results/entr_max-(n,m)=(100,10)'
+julia --project=. experiments/dc3/baselines_cone.jl 'DC3/results/entr_max-(n,m)=(100,10)'
 python -m DC3.report --app entr_max --tag '(n,m)=(100,10)'
 
 # hyper-parameter search on the validation split only

@@ -1,0 +1,59 @@
+{
+    "methods": {
+        "Ipopt(deployment)": {
+            "gap_pct_mean": 6.444089429566976e-9,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 6.444089429566976e-9,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 6.444089429566976e-9,
+            "gap_pct_max": 6.449493200316668e-9,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 1.9984014443252818e-15,
+            "obj_mean": -6.859241602633302,
+            "latency_median_ms": 13.038039207458496,
+            "oracle_assisted": false,
+            "ineq_max": 0
+        },
+        "sLME-ADMM": {
+            "iterations_at_cap": 0,
+            "gap_pct_mean": 0.0008912777132487612,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 0.0008912777132487612,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 0.0008912777132487612,
+            "gap_pct_max": 0.0012877933820424064,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 2.886579864025407e-15,
+            "obj_mean": -6.859180470069598,
+            "latency_median_ms": 3.617729,
+            "iterations_mean": 10.16,
+            "oracle_assisted": false,
+            "ineq_max": 3.025362108777241e-6,
+            "iterations_median": 10
+        },
+        "LME-ADMM": {
+            "note": "not_run: needs Gurobi"
+        },
+        "Ipopt(tol=1e-8)": {
+            "gap_pct_mean": 1.0578836716216183e-13,
+            "constraint_feasible_rate": 1,
+            "gap_pct_domain_valid_mean": 1.0578836716216183e-13,
+            "stopping_protocol": "deployment: no reference optimum used for stopping",
+            "gap_pct_feasible_mean": 1.0578836716216183e-13,
+            "gap_pct_max": 3.2375621472968186e-13,
+            "feasible_rate": 1,
+            "domain_valid_rate": 1,
+            "eq_max": 2.220446049250313e-15,
+            "obj_mean": -6.859241603075319,
+            "latency_median_ms": 13.17751407623291,
+            "oracle_assisted": false,
+            "ineq_max": 2.289335387928304e-12
+        }
+    },
+    "note": "Measured original-constraint feasibility and exact objective domain. Deployment stopping; no optimum oracle. Gurobi-dependent baselines not run.",
+    "max_opt_gap": null,
+    "schema_version": 2,
+    "n_instances": 100
+}

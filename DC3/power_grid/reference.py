@@ -5,8 +5,8 @@ problem an SOCP (``a/p <= t`` is the rotated cone ``p*t >= a, p > 0``), which is
 exactly what the JuMP model hands to Ipopt.  In cvxpy the same epigraph form is
 DCP as ``cp.pos(a * cp.inv_pos(p) - 1)``.
 
-The Julia/Ipopt reference on the *same* saved instances is produced by
-``DC3/julia/reference_power.jl``; the benchmark cross-checks the two.
+Ipopt on the *same* saved instances is run by
+``experiments/dc3/baselines_power.jl``; the report compares the two.
 """
 
 from __future__ import annotations

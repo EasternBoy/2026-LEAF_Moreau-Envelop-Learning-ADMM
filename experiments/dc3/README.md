@@ -9,8 +9,8 @@ instances; `DC3/report.py` picks that file up automatically.
 Run them from the **repository root**:
 
 ```bash
-julia --threads=auto --project=. DC3/julia/baselines_cone.jl  DC3/results/entr_max
-julia --threads=auto --project=. DC3/julia/baselines_power.jl DC3/results/power_grid
+julia --threads=auto --project=. experiments/dc3/baselines_cone.jl  DC3/results/entr_max
+julia --threads=auto --project=. experiments/dc3/baselines_power.jl DC3/results/power_grid
 ```
 
 `--threads=auto` matters: `experiments/entr_max/benchmark.jl` sizes its
@@ -42,7 +42,7 @@ checks. These results are labeled oracle-assisted and exclude reference-solve
 cost. For example:
 
 ```bash
-julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default 0.01 oracle
+julia --project=. experiments/dc3/baselines_power.jl DC3/results/power_grid-default 0.01 oracle
 ```
 
 Use different output directories to retain both modes. Feasibility and exact

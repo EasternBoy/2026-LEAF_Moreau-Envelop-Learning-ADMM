@@ -145,8 +145,8 @@ The plant, the cost function and every constant are untouched.
 
 `reference.py` solves the SOCP with cvxpy + **Clarabel** at `tol = 1e-9`
 (`a/p` enters as `cp.pos(a*cp.inv_pos(p) − 1)`).  Ipopt on the same instances is
-produced by `DC3/julia/baselines_power.jl`, and `validate.py` checks that the
-Python objective, the cvxpy solution and Ipopt all agree.
+produced by `experiments/dc3/baselines_power.jl`; `validate.py` checks that the
+Python objective and the cvxpy solution agree, and the report compares both with Ipopt.
 
 ## 5. Commands
 
@@ -157,7 +157,7 @@ python -m DC3.power_grid.train     --tag default
 python -m DC3.power_grid.benchmark --tag default
 
 # repository baselines on the same test instances (Ipopt + LME-ADMM split)
-julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default
+julia --project=. experiments/dc3/baselines_power.jl DC3/results/power_grid-default
 python -m DC3.report --app power_grid --tag default
 
 # hyper-parameter search on the validation split only

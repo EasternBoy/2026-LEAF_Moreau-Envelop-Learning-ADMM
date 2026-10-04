@@ -3,7 +3,7 @@
     python -m DC3.report --app power_grid
 
 Baselines are read from ``DC3/results/<app>[-tag]/julia_baselines.json``, which is
-written by the scripts in ``DC3/julia``.  If that file is missing the report says
+written by the scripts in ``experiments/dc3``.  If that file is missing the report says
 so explicitly instead of inventing numbers.
 """
 
@@ -194,7 +194,7 @@ def write_report(app: str, tag: str = "") -> str:
             "",
             "`julia_baselines.json` not present - the LME-ADMM / Ipopt baselines from",
             "`experiments/` were **not executed** for this run.  Produce them with",
-            f"`julia --project=. DC3/julia/baselines_{'cone' if 'cone' in app else 'power'}.jl "
+            f"`julia --project=. experiments/dc3/baselines_{'cone' if 'cone' in app else 'power'}.jl "
             f"DC3/results/{app + (f'-{tag}' if tag else '')}`.",
             "",
         ]

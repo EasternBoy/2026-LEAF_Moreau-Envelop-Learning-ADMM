@@ -1,9 +1,9 @@
 # Runs the repository's own economic-MPC solvers on the instances exported by
 # the Python benchmark, and writes julia_baselines.json next to them.
 #
-#   julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid
+#   julia --project=. experiments/dc3/baselines_power.jl DC3/results/power_grid
 #
-# See DC3/julia/README.md for the Gurobi caveat.
+# See experiments/dc3/README.md for the Gurobi caveat.
 
 using Pkg; Pkg.activate(".")
 using Base.Threads

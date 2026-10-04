@@ -10,7 +10,7 @@ applied to the two applications of this repository:
 | [`entr_max/`](entr_max/README.md) | maximum-entropy cone program | `problems/entr_max` |
 | [`power_grid/`](power_grid/README.md) | economic MPC of a PV + BESS microgrid | `problems/power_grid` |
 
-The Julia drivers in `DC3/julia/` `include`
+The Julia drivers in `experiments/dc3/` `include`
 the shared problem files so that the repository's own solvers
 (Ipopt, sLME-ADMM, LME-ADMM) are benchmarked on **the same instances** as DC3.
 
@@ -26,8 +26,6 @@ DC3/
                      metrics, timing, experiment runner
   entr_max/  problem, data, reference solver, train / benchmark, configs
   power_grid/        idem
-  julia/             drivers that run the repository's own baselines on DC3's
-                     exported test instances
   validate.py        formulation / completion / gradient checks
   tune.py            validation-only hyper-parameter search
   report.py          tables + plots from benchmark.json
@@ -51,7 +49,7 @@ DC3/.venv/bin/python -m DC3.validate
 For the Julia baselines use the repository's own project:
 
 ```bash
-julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default
+julia --project=. experiments/dc3/baselines_power.jl DC3/results/power_grid-default
 ```
 
 ## End-to-end
@@ -64,13 +62,13 @@ $PY -m DC3.validate                                        # 27 correctness chec
 # economic MPC
 $PY -m DC3.power_grid.train     --tag default
 $PY -m DC3.power_grid.benchmark --tag default
-julia --project=. DC3/julia/baselines_power.jl DC3/results/power_grid-default
+julia --project=. experiments/dc3/baselines_power.jl DC3/results/power_grid-default
 $PY -m DC3.report --app power_grid --tag default
 
 # cone program (small configuration)
 $PY -m DC3.entr_max.train     --config DC3/entr_max/configs/small.json --tag '(n,m)=(100,10)'
 $PY -m DC3.entr_max.benchmark --config DC3/entr_max/configs/small.json --tag '(n,m)=(100,10)'
-julia --project=. DC3/julia/baselines_cone.jl 'DC3/results/entr_max-(n,m)=(100,10)'
+julia --project=. experiments/dc3/baselines_cone.jl 'DC3/results/entr_max-(n,m)=(100,10)'
 $PY -m DC3.report --app entr_max --tag '(n,m)=(100,10)'
 ```
 

@@ -1,0 +1,60 @@
+{
+  "_comment": "Revised, untuned DC3 adaptation: exact uniform initialization, smaller network, streamed training pool, completion-metric preconditioning.",
+  "problem": {
+    "n": 1000,
+    "m": 100,
+    "feature_mode": "A_flat_b",
+    "w_margin": 0.0,
+    "ineq_margin": 0.0
+  },
+  "data": {
+    "n": 1000,
+    "m": 100,
+    "seed": 0,
+    "n_train": 8000,
+    "n_valid": 100,
+    "n_test": 100,
+    "stream_train": true
+  },
+  "partition": {
+    "strategy": "explicit",
+    "strict": true,
+    "cond_warn": 10000000000.0
+  },
+  "reference": {
+    "solver": "CLARABEL",
+    "tol": 1e-09,
+    "ignore_w_floor": false
+  },
+  "dc3": {
+    "hidden_size": 64,
+    "n_hidden": 2,
+    "dropout": 0.0,
+    "batch_norm": true,
+    "input_norm": true,
+    "lr": 0.0001,
+    "epochs": 100,
+    "batch_size": 32,
+    "soft_weight": 10.0,
+    "soft_weight_eq_frac": 0.5,
+    "soft_loss_power": 1,
+    "obj_scale": 1.0,
+    "use_compl": true,
+    "use_train_corr": true,
+    "use_test_corr": true,
+    "corr_mode": "partial",
+    "corr_train_steps": 10,
+    "corr_test_max_steps": 2000,
+    "corr_eps": 0.0001,
+    "corr_lr": 0.0003,
+    "corr_momentum": 0.5,
+    "seed": 0,
+    "device": "cpu",
+    "dtype": "float64",
+    "eval_every": 5,
+    "feas_tol": 0.0001,
+    "lr_decay": 0.997,
+    "output_weight_scale": 0.0,
+    "corr_preconditioner": "completion_metric"
+  }
+}
