@@ -1,4 +1,4 @@
-# DC3 benchmark - power_grid (default)
+# DC3 benchmark - power_grid (N=96)
 
 * instances: 500 test instances (`test_instances.npz`)
 * feasibility: exact objective-domain membership and max |h|, max relu(g) <= 0.0001
@@ -14,23 +14,19 @@ undefined if any sample has an invalid objective; feasible-subset gaps are repor
 ## Objective, optimality gap and feasibility
 
 ```
-method             obj (mean)  gap% mean  gap% max   gap% mean(feas)  feas rate  domain valid  max |h|   max viol  latency ms
------------------  ----------  ---------  ---------  ---------------  ---------  ------------  --------  --------  ----------
-CLARABEL(cvxpy)    37499.1     5.24e-15   3.972e-14  -                1.000      1.000         6.03e-09  7.74e-09  9.614
-DC3 + correction   39505.7     5.354      37.07      5.354            1.000      1.000         1.07e-13  9.07e-06  0.7288
-Ipopt(deployment)  37499.1     8.29e-08   8.801e-08  8.29e-08         1.000      1.000         2.13e-14  1.00e-08  13.04
-ADMM(Gurobi aux)   -           -          -          -                -          -             -         -         -
-Ipopt(tol=1e-10)   37499.1     7.477e-08  7.703e-08  7.477e-08        1.000      1.000         1.95e-14  1.00e-08  13.54
-LME-ADMM(split)    37279       0.5632     9.536      0.005641         0.468      1.000         1.51e-14  3.16e-01  66.53
+method            obj (mean)  gap% mean  gap% max   gap% mean(feas)  feas rate  domain valid  max |h|   max viol  latency ms
+----------------  ----------  ---------  ---------  ---------------  ---------  ------------  --------  --------  ----------
+CLARABEL(cvxpy)   37499.1     5.24e-15   3.972e-14  -                1.000      1.000         6.03e-09  7.74e-09  9.614
+DC3 + correction  39505.7     5.354      37.07      5.354            1.000      1.000         1.07e-13  9.07e-06  0.7288
 ```
 
 The `CLARABEL(cvxpy)` row is the **reference**: its gap is 0 by definition.  Its
 latency includes cvxpy canonicalisation on every call, so it is *not* a fair
 solver-speed comparison - use the Julia `Ipopt` rows, which report
-`JuMP.solve_time` on a pre-built parametric model, exactly as `examples/` does.
+`JuMP.solve_time` on a pre-built parametric model, exactly as `problems/` does.
 
 Gap is `100*|J - J_ref|/|J_ref|` against the reference solver, matching the
-convention of `examples/*/benchmark*.jl`.  `gap% mean(feas)` restricts the
+convention of `experiments/*/benchmark*.jl`.  `gap% mean(feas)` restricts the
 average to instances that pass the feasibility test, so an infeasible point that
 undercuts the optimum is not reported as a better solution.
 
@@ -64,5 +60,7 @@ single_instance    0.7288     1.713    0.8909   -            -
 
 ## Julia baselines
 
-Measured original-constraint feasibility and exact objective domain. Deployment stopping; no optimum oracle. Gurobi-dependent baselines not run.
+`julia_baselines.json` not present - the LME-ADMM / Ipopt baselines from
+`experiments/` were **not executed** for this run.  Produce them with
+`julia --project=. experiments/dc3/baselines_power.jl DC3/results/power_grid-N=96`.
 

@@ -14,14 +14,10 @@ undefined if any sample has an invalid objective; feasible-subset gaps are repor
 ## Objective, optimality gap and feasibility
 
 ```
-method             obj (mean)  gap% mean  gap% max   gap% mean(feas)  feas rate  domain valid  max |h|   max viol  latency ms
------------------  ----------  ---------  ---------  ---------------  ---------  ------------  --------  --------  ----------
-CLARABEL(cvxpy)    -6.85924    3.884e-15  2.59e-14   -                1.000      1.000         1.54e-10  0.00e+00  23.5
-DC3 + correction   -           -          -          0.11             0.400      0.400         3.33e-16  1.00e-04  0.719
-Ipopt(deployment)  -6.85924    6.444e-09  6.449e-09  6.444e-09        1.000      1.000         2.00e-15  0.00e+00  13.04
-sLME-ADMM          -6.85918    0.0008913  0.001288   0.0008913        1.000      1.000         2.89e-15  3.03e-06  3.618
-LME-ADMM           -           -          -          -                -          -             -         -         -
-Ipopt(tol=1e-8)    -6.85924    1.058e-13  3.238e-13  1.058e-13        1.000      1.000         2.22e-15  2.29e-12  13.18
+method            obj (mean)  gap% mean  gap% max  gap% mean(feas)  feas rate  domain valid  max |h|   max viol  latency ms
+----------------  ----------  ---------  --------  ---------------  ---------  ------------  --------  --------  ----------
+CLARABEL(cvxpy)   -6.85924    3.884e-15  2.59e-14  -                1.000      1.000         1.54e-10  0.00e+00  23.5
+DC3 + correction  -           -          -         0.11             0.400      0.400         3.33e-16  1.00e-04  0.719
 ```
 
 The `CLARABEL(cvxpy)` row is the **reference**: its gap is 0 by definition.  Its
@@ -68,5 +64,7 @@ single_instance    0.719      2.778     10.21     -            -
 
 ## Julia baselines
 
-Measured original-constraint feasibility and exact objective domain. Deployment stopping; no optimum oracle. Gurobi-dependent baselines not run.
+`julia_baselines.json` not present - the LME-ADMM / Ipopt baselines from
+`experiments/` were **not executed** for this run.  Produce them with
+`julia --project=. experiments/dc3/baselines_power.jl DC3/results/entr_max-(n,m)=(1000,10)`.
 
