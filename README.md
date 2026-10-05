@@ -137,10 +137,10 @@ and writes to results/power_grid/figures/.
 
 ## ICNN for the table
   julia --project=. experiments/power_grid/data_gen_admm.jl              # exact sMEL-ADMM iterates → data/power_grid/training/power_grid_rho=1-sLME_ADMM20-{train,test}.npz
-  julia --project=. experiments/power_grid/data_gen_admm.jl --mode=admm --first=60  # first 60% of the regular ADMM iterates (MEL-ADMM) → ...-LME_ADMM60-{train,test}.npz
+  julia --project=. experiments/power_grid/data_gen_admm.jl --mode=admm --first=100 # all regular ADMM iterates (MEL-ADMM) → ...-LME_ADMM100-{train,test}.npz
   python python/train.py power_grid-sLME_ADMM-hl=16                      # sMEL-ADMM 16x16 ICNN → models/power_grid/power_grid_rho=1-sLME_ADMM-hl=16.npz (default)
   python python/train.py power_grid-sLME_ADMM-hl=32                      # sMEL-ADMM 32x32 ICNN → ...-sLME_ADMM-hl=32.npz
-  python python/train.py power_grid-LME_ADMM-hl=16                       # MEL-ADMM 16x16 ICNN (LME_ADMM60 data) → ...-LME_ADMM-hl=16.npz
+  python python/train.py power_grid-LME_ADMM-hl=16                       # MEL-ADMM 16x16 ICNN (LME_ADMM100 data) → ...-LME_ADMM-hl=16.npz
 
 The data are the prox inputs of the first 20% of the iterations of the exact (closed-form prox)
 ADMM on the normalized problem, labelled with the exact Moreau envelope at ρ = 1; the best epoch

@@ -1,8 +1,8 @@
 {
-  "train_data": "data/power_grid/training/power_grid_rho=1-LME_ADMM60-train.npz",
-  "test_data": "data/power_grid/training/power_grid_rho=1-LME_ADMM60-test.npz",
+  "train_data": "data/power_grid/training/power_grid_rho=1-LME_ADMM100-train.npz",
+  "test_data": "data/power_grid/training/power_grid_rho=1-LME_ADMM100-test.npz",
   "output": "models/power_grid/power_grid_rho=1-LME_ADMM-hl=16.npz",
-  "_note": "data from experiments/power_grid/data_gen_admm.jl (--mode=admm --first=60: first 60% of the regular ADMM (MEL-ADMM) iterations with the exact prox, N = 96 and 192 in equal shares); 16x16 network, lr = 1e-2 \u00b7 0.9^(epoch/200)",
+  "_note": "data from experiments/power_grid/data_gen_admm.jl (--mode=admm --first=100: all regular ADMM (MEL-ADMM) iterations with the exact prox, N = 96 and 192 in equal shares); 16x16 network, lr = 1e-2 \u00b7 0.9^(epoch/200)",
   "weight_act": "softplus",
   "keep_best": true,
   "validate_on_test": true,
