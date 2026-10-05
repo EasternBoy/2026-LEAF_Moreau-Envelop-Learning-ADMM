@@ -94,7 +94,7 @@ function ADMM_eco_iter(data::MPCData_eco, prime_sol::prime_sol_struct, aux_sol::
                     CALL_BACK_STATUS = callback(z, w, α, i, J, total_time)
                 end
 
-                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(buffer) < tol)
+                TERMINATION_STATUS = CALL_BACK_STATUS || (maximum(abs, buffer) < tol)
 
                 if TERMINATION_STATUS
                     if verbose
@@ -167,7 +167,7 @@ function aux_solver_eco(solver_name::String, mpc_para::MPCData_eco)
 
     @variable(model, m[1:N])
     @variable(model, u_min  .<= u[1:N] .<= u_max)
-    @variable(model, p[1:N] .>= 1)
+    @variable(model, p[1:N] .>= 1/mpc_para.scale[3])   # p ≥ 1 kW
     @variable(model, x_min  .<= x[0:N] .<= x_max)
 
     @variable(model, para[1:dim,1:N] in MOI.Parameter.(ones(dim,N)))
@@ -175,14 +175,15 @@ function aux_solver_eco(solver_name::String, mpc_para::MPCData_eco)
     @variable(model, load[1:N]      in MOI.Parameter.(load_fc[1:N]))
     @variable(model, generator[1:N] in MOI.Parameter.(gen_fc[1:N]))
 
-    for i in 0:N-1 #Dynamics
-        @constraint(model, x[i+1] == x[i] -  dT*u[i+1]/BESS)
+    for i in 0:N-1 #Dynamics (normalized û)
+        @constraint(model, x[i+1] == mpc_para.A*x[i] + mpc_para.B*u[i+1])
     end
 
     @constraint(model, x[N] >= mpc_para.x_end_min)    #End constraint
     @constraint(model, x[0] == x0)    #Initial state
 
-    @constraint(model, u + m + generator - load - p .== 0) #Power flow
+    cm, cu, cp = pf_coef(mpc_para)
+    @constraint(model, cm*m + cu*u - cp*p .== (load - generator)/mpc_para.scale[1]) #Power flow (normalized)
 
     vars = vcat(m', u', p')
     J    = sum(dot(vars[:,i], vars[:,i]) - 2*dot(para[:,i], vars[:,i]) for i in 1:N)
@@ -321,14 +322,15 @@ function aux_solver_eco_data(solver_name::String, mpc_para::MPCData_eco)
     @variable(model, load[1:N]      in MOI.Parameter.(load_fc[1:N]))
     @variable(model, generator[1:N] in MOI.Parameter.(gen_fc[1:N]))
 
-    for i in 0:N-1 #Dynamics
-        @constraint(model, x[i+1] == x[i] -  dT*u[i+1]/BESS)
+    for i in 0:N-1 #Dynamics (normalized û)
+        @constraint(model, x[i+1] == mpc_para.A*x[i] + mpc_para.B*u[i+1])
     end
 
     @constraint(model, x[N] >= mpc_para.x_end_min)    #End constraint
     @constraint(model, x[0] == x0)    #Initial state
 
-    @constraint(model, u + m + generator - load - p .== 0) #Power flow
+    cm, cu, cp = pf_coef(mpc_para)
+    @constraint(model, cm*m + cu*u - cp*p .== (load - generator)/mpc_para.scale[1]) #Power flow (normalized)
 
     vars = vcat(m', u', p')
     J = sum(dot(vars[:,i], vars[:,i]) - 2*dot(para[:,i], vars[:,i]) for i in 1:N)

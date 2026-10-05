@@ -17,6 +17,12 @@ Source of truth
                         + r_op * max(m_k, 0)
                         + r_df * max(a/p_k - 1, 0)
 
+Normalization (as ``energy_mag()`` in Julia): all solvers work with
+m̂ = m/s_m, û = u/s_u, p̂ = p/s_p (s_u = u_max = 700, s_p = max load = 100,
+s_m = s_p + s_u = 800 kW), the SOC x unscaled, and the cost divided by K = 2e4.
+The vector ``y`` below is normalized; objectives and constraint residuals are those of
+the normalized problem (the optimality gap is unchanged, J = K Ĵ).
+
 The JuMP model writes the three non-smooth terms in epigraph form
 (``su >= |u|``, ``sm >= max(m,0)``, ``sd >= max(a/p - 1, 0)``), which at the
 optimum equals the closed form above; that closed form is also the
@@ -62,6 +68,7 @@ from ..common.problem import ParametricProblem
 DEFAULTS = dict(
     dT=0.25, A=1.0, BESS=500.0, r_ec=0.1, r_df=10.0, r_op=19.19, eta=0.8, a=50.0,
     x_min=0.2, x_max=0.8, x_end_min=0.5, u_min=-700.0, u_max=700.0, x0=0.5, N=96,
+    s_m=800.0, s_u=700.0, s_p=100.0, K=2.0e4,   # normalization (energy_mag in Julia)
 )
 
 
@@ -114,7 +121,9 @@ class EcoMPCProblem(ParametricProblem):
         self.c = cst
         self.N = int(N)
         self.Ad = float(cst["A"])
-        self.Bd = -float(cst["dT"]) / float(cst["BESS"])
+        self.s_m, self.s_u, self.s_p = float(cst["s_m"]), float(cst["s_u"]), float(cst["s_p"])
+        self.K = float(cst["K"])
+        self.Bd = -float(cst["dT"]) / float(cst["BESS"]) * self.s_u      # x_k = x_{k-1} + Bd û_k
         self.kappa = (1.0 - cst["eta"]) / (2.0 * np.sqrt(cst["eta"]))
         self.p_margin = float(p_margin)
         self.bound_margin = float(bound_margin)
@@ -150,11 +159,11 @@ class EcoMPCProblem(ParametricProblem):
             A[k, self.sl_x.start + k] = -1.0
             if k >= 1:
                 A[k, self.sl_x.start + k - 1] = self.Ad
-        # power-flow rows N..2N-1 :  m_k + u_k - p_k = load_k - gen_k
+        # power-flow rows N..2N-1 :  m̂ + (s_u/s_m) û - (s_p/s_m) p̂ = (load - gen)/s_m
         for k in range(N_):
             A[N_ + k, self.sl_m.start + k] = 1.0
-            A[N_ + k, self.sl_u.start + k] = 1.0
-            A[N_ + k, self.sl_p.start + k] = -1.0
+            A[N_ + k, self.sl_u.start + k] = self.s_u / self.s_m
+            A[N_ + k, self.sl_p.start + k] = -self.s_p / self.s_m
         return A
 
     def _build_G(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -164,9 +173,9 @@ class EcoMPCProblem(ParametricProblem):
         g = torch.zeros(5 * N_ + 1, dtype=torch.float64)
         eye = torch.eye(N_, dtype=torch.float64)
         # u <= u_max
-        G[0:N_, self.sl_u] = eye;              g[0:N_] = -c["u_max"]
+        G[0:N_, self.sl_u] = eye;              g[0:N_] = -c["u_max"] / self.s_u
         # u_min <= u
-        G[N_:2 * N_, self.sl_u] = -eye;        g[N_:2 * N_] = c["u_min"]
+        G[N_:2 * N_, self.sl_u] = -eye;        g[N_:2 * N_] = c["u_min"] / self.s_u
         # p >= 0
         G[2 * N_:3 * N_, self.sl_p] = -eye;    g[2 * N_:3 * N_] = 0.0
         # x <= x_max
@@ -193,18 +202,18 @@ class EcoMPCProblem(ParametricProblem):
         N_ = self.N
         rhs = torch.zeros(B, 2 * N_, dtype=p.x0.dtype, device=p.x0.device)
         rhs[:, 0] = -self.Ad * p.x0                 # first dynamics row
-        rhs[:, N_:] = p.load - p.gen                # power-flow rows
+        rhs[:, N_:] = (p.load - p.gen) / self.s_m   # power-flow rows (normalized)
         return rhs
 
     # -- objective ---------------------------------------------------------
     def obj_fn(self, p: GridParams, Y: torch.Tensor, safe: bool = True) -> torch.Tensor:
         c = self.c
-        m, u, pw = Y[:, self.sl_m], Y[:, self.sl_u], Y[:, self.sl_p]
+        m, u, pw = self.s_m * Y[:, self.sl_m], self.s_u * Y[:, self.sl_u], self.s_p * Y[:, self.sl_p]
         pw_eval = torch.clamp(pw, min=self.p_safe_eps) if safe else pw
         energy = c["r_ec"] * c["dT"] * (m + self.kappa * u.abs())
         peak = c["r_op"] * torch.clamp(m, min=0.0)
         discomfort = c["r_df"] * torch.clamp(c["a"] / pw_eval - 1.0, min=0.0)
-        return (energy + peak + discomfort).sum(dim=1)
+        return (energy + peak + discomfort).sum(dim=1) / self.K
 
     # -- constraints -------------------------------------------------------
     def ineq_resid(self, p: GridParams, Y: torch.Tensor, margin: bool = False) -> torch.Tensor:
@@ -278,18 +287,18 @@ class EcoMPCProblem(ParametricProblem):
         idx = completion.partial_vars.cpu().numpy()
         for j, v in enumerate(idx):
             if self.sl_u.start <= v < self.sl_u.stop:
-                lo[j], hi[j] = self.c["u_min"], self.c["u_max"]
+                lo[j], hi[j] = self.c["u_min"] / self.s_u, self.c["u_max"] / self.s_u
             elif self.sl_p.start <= v < self.sl_p.stop:
                 lo[j] = max(self.p_margin, 1e-9)
         return lo, hi
 
     def partial_init_target(self, completion):
-        """Start at `u = 0` (idle battery) and `p = a` (zero discomfort)."""
+        """Start at `u = 0` (idle battery) and `p = a` (zero discomfort), normalized."""
         t = torch.zeros(completion.n_partial, dtype=torch.float64)
         idx = completion.partial_vars.cpu().numpy()
         for j, v in enumerate(idx):
             if self.sl_p.start <= v < self.sl_p.stop:
-                t[j] = self.c["a"]
+                t[j] = self.c["a"] / self.s_p
         return t
 
     # -- reporting ---------------------------------------------------------

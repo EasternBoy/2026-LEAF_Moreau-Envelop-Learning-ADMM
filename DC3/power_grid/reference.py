@@ -56,7 +56,8 @@ def solve_instance(x0: float, load: np.ndarray, gen: np.ndarray,
     t = time.perf_counter() - t0
     if m.value is None:
         return None, t, float("nan"), prob.status
-    y = np.concatenate([m.value, u.value, p.value, x.value[1:]])
+    # normalized solution (m/s_m, u/s_u, p/s_p, x), as EcoMPCProblem
+    y = np.concatenate([m.value / c["s_m"], u.value / c["s_u"], p.value / c["s_p"], x.value[1:]])
     J = objective_numpy(y, N, c)
     return y, t, float(J), prob.status
 
@@ -64,12 +65,12 @@ def solve_instance(x0: float, load: np.ndarray, gen: np.ndarray,
 def objective_numpy(y: np.ndarray, N: int, c: dict | None = None) -> float:
     c = dict(DEFAULTS) if c is None else c
     kappa = (1.0 - c["eta"]) / (2.0 * np.sqrt(c["eta"]))
-    m, u, p = y[:N], y[N:2 * N], y[2 * N:3 * N]
+    m, u, p = c["s_m"] * y[:N], c["s_u"] * y[N:2 * N], c["s_p"] * y[2 * N:3 * N]   # y is normalized
     return float(np.sum(
         c["r_ec"] * c["dT"] * (m + kappa * np.abs(u))
         + c["r_op"] * np.maximum(m, 0.0)
         + c["r_df"] * np.maximum(c["a"] / np.clip(p, 1e-12, None) - 1.0, 0.0)
-    ))
+    )) / c["K"]
 
 
 def solve_batch(x0: np.ndarray, load: np.ndarray, gen: np.ndarray, **kw):

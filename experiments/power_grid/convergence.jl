@@ -56,7 +56,7 @@ begin
 
 
     cbs_LME_ADMM = callback_struct()
-    mgrad    = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)    
+    mgrad    = gradient_struct(model_lme, s_mb, dim; kernel = mmul_add_matrix!)    
     aux_sol  = aux_solver_eco("Gurobi", mpc_data)
     admm_sol = LME_ADMM(mpc_data, mgrad, aux_sol)
     callback = (args...) -> ADMM_callback_iter(args..., cbs_LME_ADMM)
@@ -78,7 +78,7 @@ _, sol_time_Ipopt = mpc_eco_sol(BESSinit, load, gen)
 
 
 cbs_LME_ADMM = callback_struct()
-mgrad    = gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!)    
+mgrad    = gradient_struct(model_lme, s_mb, dim; kernel = mmul_add_matrix!)    
 aux_sol  = aux_solver_eco("Gurobi", mpc_data)
 admm_sol = LME_ADMM(mpc_data, mgrad, aux_sol)
 callback = (args...) -> ADMM_callback_iter(args..., cbs_LME_ADMM)

@@ -21,7 +21,7 @@ pairing is retained only under explicit ``legacy_offsets`` for historical
 interpolation experiments (including nominal test instance 0).
 
 The ``x0`` range brackets the pool used for the ADMM training data in
-``experiments/power_grid/data_gen.jl`` (``train_pool = [1/2, 2/3, 3/4]``, ``test_pool = [3/5]``).
+the former ``experiments/power_grid/data_gen.jl`` (``train_pool = [1/2, 2/3, 3/4]``, ``test_pool = [3/5]``).
 """
 
 from __future__ import annotations

@@ -24,7 +24,7 @@ include("../../problems/power_grid/jump_solver.jl")
 include("../../problems/power_grid/admm.jl")
 include("../../problems/power_grid/lme_admm.jl")
 
-rho, mp = load_model("models/power_grid/neco_mpc-rho=1.json")
+rho, mp = load_model("models/power_grid/power_grid_rho=1-sLME_ADMM-hl=16.npz")
 
 model = ICNN(
     SMatrix{size(mp.U[1], 1), size(mp.U[1], 2)}(mp.U[1]), 

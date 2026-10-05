@@ -1,4 +1,4 @@
-# Check the returned iterate, including the strict domain p > 0.
+# Check the returned (normalized) iterate, including the strict domain p > 0.
 function eco_solution_feasible(data, v, init, load, gen, tol)
     all(isfinite, v) || return false
     m, u, p = eachrow(@view v[1:3, :])
@@ -15,8 +15,9 @@ function eco_solution_feasible(data, v, init, load, gen, tol)
     all(isfinite, x) || return false
     all(>(0), p) || return false
     previous = vcat(init, x[1:end-1])
+    cm, cu, cp = pf_coef(data)
     eq = max(maximum(abs, data.A .* previous .+ data.B .* u .- x),
-             maximum(abs, u .+ m .+ gen .- load .- p))
+             maximum(abs, cm .* m .+ cu .* u .- cp .* p .- pf_rhs(data, load, gen)))
     viol = max(maximum(u .- data.u_max), maximum(data.u_min .- u),
                maximum(x .- data.x_max), maximum(data.x_min .- x),
                data.x_end_min - x[end], init - data.x_max, data.x_min - init, 0.0)

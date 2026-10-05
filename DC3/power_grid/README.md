@@ -120,7 +120,7 @@ gives `p ≈ 0` and an objective of ~10¹³.  Two measures:
 `MOI.Parameter`:
 
 * `x0 ~ U(0.25, 0.75)` — brackets the pool used for the ADMM training data in
-  `experiments/power_grid/data_gen.jl` (`train_pool = [1/2, 2/3, 3/4]`, `test_pool = [3/5]`);
+  the former `experiments/power_grid/data_gen.jl` (`train_pool = [1/2, 2/3, 3/4]`, `test_pool = [3/5]`);
 * `(load, gen)` = the length-`N` window of the two CSVs starting at offset `s`,
   with `s` drawn from an offset pool.  The 97 admissible offsets are split
   **disjointly** 60/20/20 between train/validation/test, so no forecast window is

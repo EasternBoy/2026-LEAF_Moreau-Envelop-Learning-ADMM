@@ -12,8 +12,9 @@ function power_metrics(data, v, init, load, gen)
     valid = all(isfinite, v) && all(>(0), p)
     obj = valid ? sum(data.cost_func(m[i], u[i], p[i]) for i in eachindex(p)) : NaN
     previous = vcat(init, x[1:end-1])
+    cm, cu, cp = pf_coef(data)
     eq = max(maximum(abs, data.A .* previous .+ data.B .* u .- x),
-             maximum(abs, u .+ m .+ gen .- load .- p))
+             maximum(abs, cm .* m .+ cu .* u .- cp .* p .- pf_rhs(data, load, gen)))
     ineq = max(maximum(u .- data.u_max), maximum(data.u_min .- u), maximum(-p),
                maximum(x .- data.x_max), maximum(data.x_min .- x), data.x_end_min - x[end],
                init - data.x_max, data.x_min - init, 0.0)

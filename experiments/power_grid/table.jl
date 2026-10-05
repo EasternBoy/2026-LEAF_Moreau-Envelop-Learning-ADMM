@@ -15,8 +15,9 @@ if Sys.isapple()
 end
 
 # Optional arguments (the defaults are the constants below):
-#   julia --project=. --threads=8 experiments/power_grid/table.jl [--N=96] [--gopt=0.1] [--model=<path>.json --tag=<tag>]
-# --model replaces the ICNN of problems/power_grid/setup.jl; its results go to
+#   julia --project=. --threads=8 experiments/power_grid/table.jl [--N=96] [--gopt=0.1] [--model=<path>.npz] [--lme-model=<path>.npz --tag=<tag>] [--methods=MEL-ADMM,...]
+# --methods=<comma-separated list> runs a subset of the methods (IPOPT still gives the references).
+# --model / --lme-model replace the sMEL-ADMM / MEL-ADMM ICNN of problems/power_grid/setup.jl; the results go to
 # results/power_grid/table/<tag>/gap=<g_opt>/ instead of results/power_grid/table/gap=<g_opt>/.
 function table_arg(name, default)
     i = findfirst(a -> startswith(a, "--$name="), ARGS)
@@ -25,31 +26,25 @@ end
 
 const FloatType = Float64
 const tol = 1e-2
-const admm_tol = 1e-2
+const admm_tol = 1e-4
 const smel_feas_tol = 1e-4   # sMEL-ADMM returned-solution feasibility tolerance (residual: tol)
-const smel_gamma = parse(Float64, table_arg("smel-gamma", "1.2"))   # sMEL-ADMM over-relaxation
+const smel_gamma = parse(Float64, table_arg("smel-gamma", "1.6"))   # sMEL-ADMM over-relaxation of the z-update
 const admm_rho = 1.
-const smel_state_scale = 400.0
 const nsamples = 1000
 const g_opt = parse(Float64, table_arg("gopt", "0.1"))
 const s_mb = 24
 const model_tag = table_arg("tag", "")
-const POWER_GRID_MODEL = table_arg("model", "models/power_grid/neco_mpc-rho=1.json")
-table_arg("model", nothing) !== nothing && isempty(model_tag) &&
-    error("--model needs --tag, so that its results do not overwrite the default model's")
+const POWER_GRID_MODEL = table_arg("model", "models/power_grid/power_grid_rho=1-sLME_ADMM-hl=16.npz")
+const POWER_GRID_LME_MODEL = table_arg("lme-model", "models/power_grid/power_grid_rho=1-LME_ADMM-hl=16.npz")
+(table_arg("model", nothing) !== nothing || table_arg("lme-model", nothing) !== nothing) && isempty(model_tag) &&
+    error("--model / --lme-model need --tag, so that their results do not overwrite the default models'")
 const output_dir = joinpath(repo_root, "results", "power_grid", "table", model_tag, "gap=$(g_opt)")
 const seed = 20262309
 const gc_every = 1
 const max_iter = 1000
 const feas_tol = 1e-6
 const reference_tol = 1e-10
-const methods = [
-    "IPOPT",
-    "MadNLP",
-    "ADMM",
-    "MEL-ADMM",
-    "sMEL-ADMM",
-]
+const methods = split(table_arg("methods", "IPOPT,MadNLP,ADMM,MEL-ADMM,sMEL-ADMM"), ",")   # e.g. --methods=MEL-ADMM
 
 residual_tolerance(name) = name == "IPOPT" ? reference_tol : name == "ADMM" ? admm_tol : tol
 feasibility_tolerance(name) = name == "sMEL-ADMM" ? smel_feas_tol : residual_tolerance(name)
@@ -68,14 +63,9 @@ N = parse(Int, table_arg("N", "96"))
 const input_tag = "N=$(N)"
 const power_table_input_dir = joinpath(repo_root, "results", "power_grid", "table", "instances")
 const input_file = joinpath(power_table_input_dir, "test_instances_$(input_tag).npz")
-let d = mpc_data
-    c = eco_mpc(d.r_ec, d.r_df, d.r_op, d.η, d.dT, N, d.a)
-    global mpc_data = MPCData_eco(d.A, d.B, d.r_ec, d.r_df, d.r_op, d.η,
-        d.BESS, d.dT, d.a, d.x_min, d.x_max, d.x_end_min, d.u_min, d.u_max, d.x0,
-        d.dim, N, d.load_forecast, d.gen_forecast, admm_rho, c)
-end
+mpc_data = with_horizon(mpc_data, N; rho = admm_rho)   # normalized problem (energy_mag)
 
-const case_tag = "$(input_tag)_rho=$(admm_rho)_state_scale=$(smel_state_scale)_" *
+const case_tag = "$(input_tag)_normalized_K=$(@sprintf("%.0e", mpc_data.K))_rho=$(admm_rho)_" *
     @sprintf("optgap=%.6g_residual_ipopt=%.0e_admm=%.0e_others=%.0e_smelfeas=%.0e_smelgamma=%.2g",
              g_opt, reference_tol, admm_tol, tol, smel_feas_tol, smel_gamma)
 
@@ -112,15 +102,16 @@ if madnlp_gap_callback
     end
 end
 
-# Check constraints of the original problem, reconstructing states from u.
+# Check the constraints of the normalized problem, reconstructing states from û.
 function feasibility(vars, x0, load, gen)
     d = mpc_data
+    cm, cu, cp = pf_coef(d)
     x = x0
     residual = 0.0
     for k in 1:d.N
         m, u, p = vars[1, k], vars[2, k], vars[3, k]
         x = d.A * x + d.B * u
-        residual = max(residual, abs(u + m + gen[k] - load[k] - p),
+        residual = max(residual, abs(cm*m + cu*u - cp*p - (load[k] - gen[k])/d.scale[1]),
             d.u_min - u, u - d.u_max, -p, d.x_min - x, x - d.x_max)
         size(vars, 1) == 4 && (residual = max(residual, abs(vars[4, k] - x)))
     end
@@ -178,11 +169,11 @@ function admm_runner(name, target)
         solve = ADMM_eco_iter(d, prime_sol_struct("Ipopt", d), aux_solver_eco("Gurobi", d);
                              tol = solver_tol, max_iter = max_iter)
     elseif name == "MEL-ADMM"
-        solve = LME_ADMM(d, gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!),
+        solve = LME_ADMM(d, gradient_struct(model_lme, s_mb, dim; kernel = mmul_add_matrix!),
                          aux_solver_eco("Gurobi", d))
     else
         solve = LME_ADMM_split(d, gradient_struct(model, s_mb, dim; kernel = mmul_add_matrix!),
-                               dynamics_projection(d; state_scale=smel_state_scale))
+                               dynamics_projection(d))
     end
     cb = function (z, w, α, iter, J, seconds)
         target.iterations = iter
@@ -283,7 +274,10 @@ function main()
     end
     runners = [name in ("IPOPT", "MadNLP") ? nlp_runner(name, target) : admm_runner(name, target) for name in methods]
     metadata = Dict("N" => N, "rho" => admm_rho, "primary_scalar_variables" => dim * N,
-        "smel_state_scale" => smel_state_scale, "icnn_model" => POWER_GRID_MODEL,
+        "normalization" => Dict("scale_m_u_p" => collect(mpc_data.scale), "cost_scale_K" => mpc_data.K,
+            "note" => "all solvers use m/s_m, u/s_u, p/s_p, SOC x and cost J/K; objectives, gaps and violations are of the normalized problem"),
+        "icnn_model" => POWER_GRID_MODEL,
+        "icnn_model_lme" => POWER_GRID_LME_MODEL,
         "case_tag" => case_tag, "source_instances_file" => input_file,
         "reference_instances_file" => basename(files[1]),
         "results_file" => basename(files[2]), "summary_file" => basename(files[3]),

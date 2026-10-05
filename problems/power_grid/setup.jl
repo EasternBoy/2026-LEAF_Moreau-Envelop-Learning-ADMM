@@ -6,10 +6,10 @@ if !(@isdefined(GUROBI_ENV))
 end
 
 
-# A script may set POWER_GRID_MODEL before including this file to use another ICNN.
-rho, mp = load_model(@isdefined(POWER_GRID_MODEL) ? POWER_GRID_MODEL : "models/power_grid/neco_mpc-rho=1.json")
-
-model = ICNN(
+# The ICNNs of the learned Moreau envelope: `model` for sMEL-ADMM (LME_ADMM_split), trained on
+# sMEL-ADMM iterates, and `model_lme` for MEL-ADMM (LME_ADMM), trained on regular ADMM iterates.
+# A script may set POWER_GRID_MODEL / POWER_GRID_LME_MODEL before including this file to use others.
+icnn_from(mp) = ICNN(
     mp.U[1], 
     mp.b[1],
     [ICNN_Layer(mp.U[i], mp.W[i], mp.b[i]) for i in 2:length(mp.U)],
@@ -17,14 +17,20 @@ model = ICNN(
     mp.a,
     mp.c)
 
+rho, mp = load_model(@isdefined(POWER_GRID_MODEL) ? POWER_GRID_MODEL : "models/power_grid/power_grid_rho=1-sLME_ADMM-hl=16.npz")
+model = icnn_from(mp)
+_, mp_lme = load_model(@isdefined(POWER_GRID_LME_MODEL) ? POWER_GRID_LME_MODEL : "models/power_grid/power_grid_rho=1-LME_ADMM-hl=16.npz")
+model_lme = icnn_from(mp_lme)
+
 mpc_data  = energy_mag()
 N   = mpc_data.N
 dim = mpc_data.dim
 
-# Optimum of the nominal instance x0 = 0.5 only; with x_N >= x_end_min it depends on x0.
-Jopt::FloatType = 36479.1
+# Optimum of the nominal instance x0 = 0.5 only (with x_N >= x_end_min it depends on x0),
+# in the units of the normalized problem: physical J / K.
+Jopt::FloatType = 36479.1 / mpc_data.K
 if N == 192
-    Jopt = 73117.5
+    Jopt = 73117.5 / mpc_data.K
 end
 
 function Ipopt_callback_BM(

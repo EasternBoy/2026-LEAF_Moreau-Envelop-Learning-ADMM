@@ -37,14 +37,15 @@ function mpc_eco_solver(name, mpc_para, tol,
     @variable(model, load[1:N]      in MOI.Parameter.(load_fc[1:N]))
     @variable(model, generator[1:N] in MOI.Parameter.(gen_fc[1:N]))
 
-    for i in 0:N-1 #Dynamics
-        @constraint(model, x[i+1] == x[i] -  dT*u[i+1]/BESS)
+    for i in 0:N-1 #Dynamics (normalized û: B = -dT s_u/BESS)
+        @constraint(model, x[i+1] == mpc_para.A*x[i] + mpc_para.B*u[i+1])
     end
 
     @constraint(model, x[N] >= mpc_para.x_end_min) #End constraint
     @constraint(model, x[0] == x0) #Initial state
 
-    @constraint(model, u + m + generator - load - p .== 0) #Power flow
+    cm, cu, cp = pf_coef(mpc_para)
+    @constraint(model, cm*m + cu*u - cp*p .== (load - generator)/mpc_para.scale[1]) #Power flow (normalized)
 
     J = sum(cost_func(m[k], u[k], p[k], model) for k in 1:N)
     @objective(model, Min, J)

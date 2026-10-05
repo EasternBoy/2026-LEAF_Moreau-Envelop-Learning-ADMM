@@ -98,6 +98,12 @@ class DC3Config:
     corr_lr: float = 1e-4
     corr_momentum: float = 0.5
     corr_freeze_converged: bool = False   # False = faithful to DC3
+    corr_project_partial: bool = False    # True: clamp the partial variables to the problem's
+                                          # partial_bounds after every correction step (projected
+                                          # correction); False = faithful to DC3
+    corr_eps_unscaled: bool = False       # True: stop the correction on the unscaled (original-unit)
+                                          # violation, as reported with feas_tol; False: on the
+                                          # internal row-scaled violation
     corr_preconditioner: str = "none"  # or completion_metric (explicit variant)
     corr_grad_mode: str = "closed_form"   # 'closed_form' | 'autograd'
     ineq_row_scale: str = "auto"          # 'auto' (problem hook) or 'none'
@@ -157,6 +163,17 @@ class DC3Solver(nn.Module):
             M = completion.A_other_inv_A_partial
             metric_factor = torch.linalg.solve(torch.eye(M.shape[0], device=M.device, dtype=M.dtype) + M @ M.T, M)
         self.register_buffer("_metric_factor", metric_factor, persistent=False)
+        proj_lo = proj_hi = None
+        if cfg.corr_project_partial:
+            if cfg.corr_mode != "partial" or not cfg.use_compl:
+                raise ValueError("corr_project_partial applies only to partial correction with completion")
+            pb = problem.partial_bounds(completion)
+            if pb is None:
+                raise ValueError("corr_project_partial needs problem.partial_bounds")
+            proj_lo = pb[0].to(device=problem.A_eq.device, dtype=problem.A_eq.dtype)
+            proj_hi = pb[1].to(device=problem.A_eq.device, dtype=problem.A_eq.dtype)
+        self.register_buffer("_proj_lo", proj_lo, persistent=False)
+        self.register_buffer("_proj_hi", proj_hi, persistent=False)
         out_dim = completion.n_partial if cfg.use_compl else problem.n_y
         transform = None
         if cfg.output_transform == "bounded" and cfg.use_compl:
@@ -235,6 +252,12 @@ class DC3Solver(nn.Module):
         # Woodbury: (I + M' M)^-1 grad, avoiding a dense n_partial square solve.
         return grad - (grad @ M.T) @ self._metric_factor
 
+    def _project(self, Z):
+        """Projected correction: clamp the partial variables to their bounds (if enabled)."""
+        if self._proj_lo is None:
+            return Z
+        return torch.maximum(torch.minimum(Z, self._proj_hi), self._proj_lo)
+
     def correct_train(self, params: Any, Z: torch.Tensor) -> torch.Tensor:
         """Fixed number of differentiable correction steps (``grad_steps``)."""
         cfg = self.cfg
@@ -251,7 +274,7 @@ class DC3Solver(nn.Module):
             else:
                 d = self._viol_grad_full(params, Z_new, create_graph=True)
             new_step = cfg.corr_lr * self._precondition(d) + cfg.corr_momentum * old_step
-            Z_new = Z_new - new_step
+            Z_new = self._project(Z_new - new_step)
             old_step = new_step
         return Z_new
 
@@ -291,7 +314,7 @@ class DC3Solver(nn.Module):
             new_step = cfg.corr_lr * self._precondition(d) + cfg.corr_momentum * old_step
             if cfg.corr_freeze_converged:
                 new_step = new_step * (~conv).unsqueeze(1).to(new_step.dtype)
-            Z_new = Z_new - new_step
+            Z_new = self._project(Z_new - new_step)
             old_step = new_step
             i += 1
             conv = self._converged(params, self.correction_output(params, Z_new))
@@ -301,7 +324,9 @@ class DC3Solver(nn.Module):
 
     def _converged(self, params: Any, Y: torch.Tensor) -> torch.Tensor:
         eps = self.cfg.corr_eps
-        ineq_ok = self.ineq_dist_int(params, Y).amax(dim=1) <= eps
+        ineq = (self.problem.ineq_dist(params, Y, margin=True) if self.cfg.corr_eps_unscaled
+                else self.ineq_dist_int(params, Y))
+        ineq_ok = ineq.amax(dim=1) <= eps
         eq = self.problem.eq_resid(params, Y).abs()
         eq_ok = eq.amax(dim=1) <= eps if eq.shape[1] > 0 else torch.ones_like(ineq_ok)
         return ineq_ok & eq_ok

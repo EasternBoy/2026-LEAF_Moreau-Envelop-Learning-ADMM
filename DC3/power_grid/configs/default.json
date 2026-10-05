@@ -1,5 +1,5 @@
 {
-  "_comment": "Temporal split before windowing. N=96 needs at least 288 aligned samples; bundled 192-sample data is insufficient. Supply data.load_csv/data.gen_csv. legacy.json reproduces interpolation only.",
+  "_comment": "Temporal split before windowing. N=96 needs at least 288 aligned samples; bundled 192-sample data is insufficient. Supply data.load_csv/data.gen_csv. legacy.json reproduces interpolation only. Normalized problem (m/800, u/700, p/100, x; cost J/K, K=2e4): soft_weight, obj_scale, corr_lr, corr_preconditioner, corr_project_partial and corr_eps_unscaled re-chosen on the validation split for it.",
   "problem": {
     "N": 96,
     "feature_mode": "x0_load_gen",
@@ -36,10 +36,10 @@
     "lr": 0.001,
     "epochs": 600,
     "batch_size": 64,
-    "soft_weight": 10.0,
+    "soft_weight": 100.0,
     "soft_weight_eq_frac": 0.0,
     "soft_loss_power": 1,
-    "obj_scale": 100.0,
+    "obj_scale": 0.05,
     "use_compl": true,
     "use_train_corr": true,
     "use_test_corr": true,
@@ -47,7 +47,7 @@
     "corr_train_steps": 10,
     "corr_test_max_steps": 500,
     "corr_eps": 0.0001,
-    "corr_lr": 0.01,
+    "corr_lr": 1.0,
     "corr_momentum": 0.5,
     "seed": 0,
     "device": "cpu",
@@ -55,6 +55,9 @@
     "eval_every": 5,
     "feas_tol": 0.0001,
     "lr_decay": 0.995,
-    "output_weight_scale": 0.0
+    "output_weight_scale": 0.0,
+    "corr_preconditioner": "completion_metric",
+    "corr_project_partial": true,
+    "corr_eps_unscaled": true
   }
 }

@@ -114,8 +114,8 @@ def validate_power(N=96, n_inst=4, seed=0):
 
     # nominal instance must reproduce the hard-coded Jopt from problems/power_grid/setup.jl
     if N == 96:
-        check("nominal instance reproduces Jopt = 36479.1",
-              abs(J_py[0] - 36479.1) < 0.5, f"J = {J_py[0]:.4f}")
+        check("nominal instance reproduces Jopt = 36479.1 (K·Ĵ)",
+              abs(prob.K * J_py[0] - 36479.1) < 0.5, f"K·Ĵ = {prob.K * J_py[0]:.4f}")
 
     # --- closed-form completion vs generic linear solve -------------------
     Z = comp.partial_of(Y)
@@ -138,7 +138,7 @@ def _closed_form_completion(prob, params, Z):
     u = Z[:, :N]
     p = Z[:, N:]
     x = params.x0.unsqueeze(1) + prob.Bd * torch.cumsum(u, dim=1)
-    m = params.load - params.gen - u + p
+    m = (params.load - params.gen) / prob.s_m - (prob.s_u / prob.s_m) * u + (prob.s_p / prob.s_m) * p
     return torch.cat([m, u, p, x], dim=1)
 
 

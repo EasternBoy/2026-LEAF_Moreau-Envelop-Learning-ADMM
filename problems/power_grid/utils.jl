@@ -1,18 +1,18 @@
 using LMEADMM   # src/LMEADMM.jl
 
 
-function dynamics_projection(mpc_data::MPCData_eco; state_scale::Real = 1.0)
-    # Project in coordinates [m, u, p, state_scale*x], returning physical units.
-    isfinite(state_scale) && state_scale > 0 ||
-        throw(ArgumentError("state_scale must be finite and positive"))
-    # The following is for establishment of constraint Ms = b
-    # Order of variables: s = [m, u, p, x]ᵀ  R^{4N)}
-    # Rows: N dynamics, then N power flow. The terminal bound x_N >= x_end_min is an
-    # inequality, so it is enforced by the box step of LME_ADMM_split, not here.
+function dynamics_projection(mpc_data::MPCData_eco)
+    # Euclidean projection onto the equality constraints of the normalized problem,
+    # in the variables s = [m̂, û, p̂, x] ∈ R^{4N} (see energy_mag).
+    # Rows: N dynamics x_k = A x_{k-1} + B û_k, then N power flow
+    # m̂ + (s_u/s_m) û − (s_p/s_m) p̂ = (load − gen)/s_m.  The terminal bound x_N >= x_end_min
+    # is an inequality, so it is enforced by the box step of LME_ADMM_split, not here.
 
     A = mpc_data.A
     B = mpc_data.B
     N = mpc_data.N
+    cm, cu, cp = pf_coef(mpc_data)
+    s_m = mpc_data.scale[1]
     IN = Matrix{FloatType}(I, N, N)
 
     Mu = B*IN
@@ -24,10 +24,8 @@ function dynamics_projection(mpc_data::MPCData_eco; state_scale::Real = 1.0)
     end
 
     M = hcat(zeros(N, N), Mu, zeros(N, N), Mx)
-    M = vcat(M, hcat(IN, IN, -IN, zeros(N,N)))  
-    scales = vcat(ones(FloatType, 3N), fill(FloatType(state_scale), N))
-    row_scales = vcat(fill(FloatType(state_scale), N), ones(FloatType, N))
-    Ms = spdiagm(0 => row_scales) * sparse(M) * spdiagm(0 => 1 ./ scales)
+    M = vcat(M, hcat(cm*IN, cu*IN, -cp*IN, zeros(N,N)))
+    Ms = sparse(M)
 
     # y = q - M'*(M*M')^(-1)*(M*q-b), equivalent to the full KKT solve.
     F = cholesky(Symmetric(Ms * Ms'))
@@ -36,26 +34,23 @@ function dynamics_projection(mpc_data::MPCData_eco; state_scale::Real = 1.0)
     result = zeros(FloatType, 4, N)
 
     let F  = F,
-        scales = scales,
         Ms = Ms,
-        row_scales = row_scales,
         N  = N,
-        A  = A
+        A  = A,
+        s_m = s_m
         return @inbounds function proj(qm::Matrix{Float64}, init::FloatType, load_fc::Vector{FloatType}, gen_fc::Vector{FloatType})
             for r in 1:4, k in 1:N
-                j = (r-1)*N+k
-                query[j] = scales[j] * qm[r,k]
+                query[(r-1)*N+k] = qm[r,k]
             end
             mul!(residual, Ms, query)
-            residual[1] += row_scales[1] * A * init
+            residual[1] += A * init
             for k in 1:N
-                residual[N+k] -= load_fc[k] - gen_fc[k]
+                residual[N+k] -= (load_fc[k] - gen_fc[k]) / s_m
             end
             multipliers = F \ residual
             mul!(query, Ms', multipliers, -1.0, 1.0)
             for r in 1:4, k in 1:N
-                j = (r-1)*N+k
-                result[r,k] = query[j] / scales[j]
+                result[r,k] = query[(r-1)*N+k]
             end
             return result
         end

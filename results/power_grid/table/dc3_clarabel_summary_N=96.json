@@ -1,0 +1,19 @@
+{
+  "case_tag": "N=96",
+  "instances_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/table/instances/test_instances_N=96.npz",
+  "checkpoint": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/results/power_grid-N=96/checkpoint.pt",
+  "samples": 1000,
+  "device": "cpu",
+  "dtype": "torch.float64",
+  "max_iter": 200,
+  "reference_solver": "CLARABEL via DC3.power_grid.reference.solve_instance (tol=1e-9)",
+  "gap_definition": "100 * abs(DC3 objective - CLARABEL objective) / abs(CLARABEL objective)",
+  "opt_gap_mean_pct": 0.14545775726580926,
+  "opt_gap_max_pct": 0.6196259812388263,
+  "constraint_violation_mean": 9.671253176486045e-05,
+  "constraint_violation_max": 9.995171735444064e-05,
+  "solve_time_mean_ms": 7.3681541260448284,
+  "solve_time_max_ms": 13.701708987355232,
+  "solve_time_std_ms": 0.3432669097149562,
+  "per_instance_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/table/dc3_clarabel_results_N=96.csv"
+}

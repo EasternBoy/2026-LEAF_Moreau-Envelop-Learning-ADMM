@@ -6,8 +6,9 @@
 #   weight_act  "relu" (entr_max, mpc) or "softplus" (power_grid, mvee): the projection act_p
 #   keep_best   return the parameters with the best validation objective (entr_max, mpc)
 #               or those of the last epoch (power_grid, mvee).  Given val_data = (X, y, g),
-#               train_icnn scores that validation set every val_every epochs; otherwise the
-#               objective is scored on the first 1024 training samples
+#               train_icnn scores that validation set at every learning-rate transition
+#               (every lr_decay transition_steps, or every epochs/10 without lr_decay); otherwise
+#               the objective is scored on the first 1024 training samples
 #   f           lower-bound targets: adds penalty_weight * mean(relu(f_pred - f)) and an
 #               explicit L2 term l2_reg * ||params||² to the loss (mvee)
 
@@ -185,17 +186,20 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         penalty_weight: float = 1.0,
         lr_decay: Optional[Dict[str, Any]] = None,
         val_data: Optional[tuple] = None,
-        val_every: int = 10,
     ) -> Dict[str, Any]:
         bounded = f is not None
         key = jax.random.PRNGKey(seed)
         arrays = [jnp.asarray(a, dtype=jnp.float32) for a in ((X, y, g, f) if bounded else (X, y, g))]
-        if val_data is not None:   # separate validation set (X, y, g)
+        val_every = max(1, epochs // 10)
+        if val_data is not None:   # separate validation set (X, y, g), scored at each lr transition
             val_arrays = [jnp.asarray(a, dtype=jnp.float32) for a in val_data]
+            if lr_decay:
+                steps_per_epoch = -(-X.shape[0] // batch_size)
+                per = 1 if lr_decay.get("unit", "step") == "epoch" else steps_per_epoch
+                val_every = max(1, -(-lr_decay["transition_steps"] // per))
             print(f"training on {X.shape[0]} samples, validating on {val_arrays[0].shape[0]} samples every {val_every} epochs")
         else:
             val_arrays = [a[:1024] for a in arrays]
-            val_every = max(1, epochs // 10)
         Xj, yj, gj = arrays[:3]
         Xv, yv, gv = val_arrays[:3]
 

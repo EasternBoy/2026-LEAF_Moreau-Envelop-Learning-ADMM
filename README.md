@@ -108,8 +108,12 @@ MEL-ADMM runs threaded mini-batches, so Julia needs more than one thread:
 This first solves IPOPT references (tol 1e-10) on every instance, then runs each
 method until `g_opt` is reached. Outputs go to results/power_grid/table/gap=<g_opt>/:
 `results_*.csv` (per instance), `summary_*.csv`, `metadata_*.json`,
-`ipopt_references_*.npz` and the rendered `table_*.md`. sMEL-ADMM uses the ICNN
-loaded in problems/power_grid/setup.jl, models/power_grid/neco_mpc-rho=1.json.
+`ipopt_references_*.npz` and the rendered `table_*.md`. All methods solve the normalized
+problem of `energy_mag()` (m/800, u/700, p/100, SOC x; cost J/K with K = 2e4; ρ = 1), so
+objectives and constraint violations are in normalized units (gaps are unchanged).
+MEL-ADMM and sMEL-ADMM use the ICNNs loaded in problems/power_grid/setup.jl:
+models/power_grid/power_grid_rho=1-LME_ADMM-hl=16.npz (MEL-ADMM, or `--lme-model=...`) and
+models/power_grid/power_grid_rho=1-sLME_ADMM-hl=16.npz (sMEL-ADMM, or `--model=...`).
 
 ## DC3 + correction
 Train one network per horizon (N comes from `table_benchmark.N`), then evaluate it
@@ -132,6 +136,12 @@ boxplot.py reads the Julia results for `G_OPT` and the DC3 files for both horizo
 and writes to results/power_grid/figures/.
 
 ## ICNN for the table
-  python python/train.py power_grid    # data/power_grid/training/eco_mpc-rho=1.0-{train,test}.npz → models/power_grid/neco_mpc-rho=1
+  julia --project=. experiments/power_grid/data_gen_admm.jl              # exact sMEL-ADMM iterates → data/power_grid/training/power_grid_rho=1-sLME_ADMM20-{train,test}.npz
+  julia --project=. experiments/power_grid/data_gen_admm.jl --mode=admm --first=60  # first 60% of the regular ADMM iterates (MEL-ADMM) → ...-LME_ADMM60-{train,test}.npz
+  python python/train.py power_grid-sLME_ADMM-hl=16                      # sMEL-ADMM 16x16 ICNN → models/power_grid/power_grid_rho=1-sLME_ADMM-hl=16.npz (default)
+  python python/train.py power_grid-sLME_ADMM-hl=32                      # sMEL-ADMM 32x32 ICNN → ...-sLME_ADMM-hl=32.npz
+  python python/train.py power_grid-LME_ADMM-hl=16                       # MEL-ADMM 16x16 ICNN (LME_ADMM60 data) → ...-LME_ADMM-hl=16.npz
 
-The training data comes from ADMM runs in experiments/power_grid/data_gen.jl.
+The data are the prox inputs of the first 20% of the iterations of the exact (closed-form prox)
+ADMM on the normalized problem, labelled with the exact Moreau envelope at ρ = 1; the best epoch
+is chosen on the test file at every learning-rate transition.

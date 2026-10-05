@@ -86,6 +86,9 @@ for k in 1:count_
             k, count_, Jh, Jb, 1e3tb, J_sl[k], 1e3ts, eq_sl[k], in_sl[k], minimum(pv))
 end
 
+# solvers work on the normalized problem; report physical objectives (J = K Ĵ)
+J_hi .*= mpc_data.K; J_bm .*= mpc_data.K; J_sl .*= mpc_data.K
+
 result = Dict(
     "schema_version" => 2,
     "note" => "Measured original-constraint feasibility and exact objective domain. " *

@@ -1,0 +1,28 @@
+{
+  "train_data": "data/power_grid/training/power_grid_rho=1-sLME_ADMM20-train.npz",
+  "test_data": "data/power_grid/training/power_grid_rho=1-sLME_ADMM20-test.npz",
+  "output": "models/power_grid/power_grid_rho=1-sLME_ADMM-hl=32.npz",
+  "_note": "data from experiments/power_grid/data_gen_admm.jl (first 20% of the sMEL-ADMM iterations with the exact prox, N = 96 and 192 in equal shares); 32x32 network, lr = 1e-2 \u00b7 0.9^(epoch/200)",
+  "weight_act": "softplus",
+  "keep_best": true,
+  "validate_on_test": true,
+  "export_act": "softplus",
+  "lower_bound": false,
+  "train": {
+    "widths": [
+      32,
+      32
+    ],
+    "lr": 0.01,
+    "grad_weight": 5.0,
+    "l2_reg": 0,
+    "batch_size": 16,
+    "epochs": 8000,
+    "seed": 0,
+    "lr_decay": {
+      "transition_steps": 200,
+      "decay_rate": 0.9,
+      "unit": "epoch"
+    }
+  }
+}

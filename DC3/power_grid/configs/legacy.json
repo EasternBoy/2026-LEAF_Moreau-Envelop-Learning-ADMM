@@ -38,7 +38,7 @@
     "soft_weight": 10.0,
     "soft_weight_eq_frac": 0.0,
     "soft_loss_power": 1,
-    "obj_scale": 100.0,
+    "obj_scale": 0.005,
     "use_compl": true,
     "use_train_corr": true,
     "use_test_corr": true,
