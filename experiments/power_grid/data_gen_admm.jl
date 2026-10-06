@@ -4,10 +4,11 @@
 #   julia --project=. experiments/power_grid/data_gen_admm.jl 1,3          # shares of N = 96, 192
 #   julia --project=. experiments/power_grid/data_gen_admm.jl --mode=admm  # regular ADMM iterates (for MEL-ADMM)
 #   julia --project=. experiments/power_grid/data_gen_admm.jl --mode=admm --first=40   # keep the first 40% of the iterations
+#   julia --project=. experiments/power_grid/data_gen_admm.jl --mode=admm --first=100 --ntrain=10000   # 10000 training samples
 #
 # Writes data/power_grid/training/power_grid_rho=1-<tag>-{train,test}.npz, <tag> = sLME_ADMM<first> (sMEL-ADMM)
 # or LME_ADMM<first> (--mode=admm), <first> = --first (default 20), for equal shares, with -<shares> appended otherwise:
-# 8000 train and 2000 test samples, split between the
+# 8000 (--ntrain) train and 2000 test samples, split between the
 # horizons in proportion to the shares (input (3 × samples), enve, grad (3 × samples), rho, as the
 # other data files, plus where each sample came from: N, x0, instance, iteration, n_iter).
 #
@@ -56,9 +57,10 @@ const HORIZONS     = [96, 192]
 const POS_ARGS     = filter(a -> !startswith(a, "--"), ARGS)
 const SHARES       = length(POS_ARGS) >= 1 ? parse.(Int, split(POS_ARGS[1], ",")) : [1, 1]
 const BASE_TAG     = (MODE == "admm" ? "LME_ADMM" : "sLME_ADMM") * string(FIRST_PCT)
-const TAG          = allequal(SHARES) ? BASE_TAG : BASE_TAG * "-" * join(SHARES)
+const N_TRAIN      = parse(Int, gen_arg("ntrain", "8000"))   # training samples; another count than 8000 appends -<count/1000>k
+const TAG          = (allequal(SHARES) ? BASE_TAG : BASE_TAG * "-" * join(SHARES)) *
+                     (N_TRAIN == 8000 ? "" : "-$(N_TRAIN ÷ 1000)k")
 const SEED         = 1
-const N_TRAIN      = 8000
 const N_TEST       = 2000
 const PER_INSTANCE = 50
 const FIRST_FRAC   = FIRST_PCT / 100
