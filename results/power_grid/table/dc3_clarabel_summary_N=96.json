@@ -1,7 +1,7 @@
 {
   "case_tag": "N=96",
-  "instances_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/table/instances/test_instances_N=96.npz",
-  "checkpoint": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/results/power_grid-N=96/checkpoint.pt",
+  "instances_file": "2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/instances/test_instances_N=96.npz",
+  "checkpoint": "2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/results/power_grid-N=96/checkpoint.pt",
   "samples": 1000,
   "device": "cpu",
   "dtype": "torch.float64",
@@ -15,5 +15,5 @@
   "solve_time_mean_ms": 7.3681541260448284,
   "solve_time_max_ms": 13.701708987355232,
   "solve_time_std_ms": 0.3432669097149562,
-  "per_instance_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/table/dc3_clarabel_results_N=96.csv"
+  "per_instance_file": "2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/table/dc3_clarabel_results_N=96.csv"
 }

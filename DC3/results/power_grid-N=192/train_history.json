@@ -18,7 +18,7 @@
       "x0_hi": 0.75,
       "split_strategy": "temporal",
       "split_gap": 0,
-      "table_instances_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/table/instances/test_instances_N=192.npz"
+      "table_instances_file": "2026-LEAF_Moreau-Envelop-Learning-ADMM/results/power_grid/instances/test_instances_N=192.npz"
     },
     "partition": {
       "strategy": "explicit",
@@ -62,7 +62,7 @@
       "corr_project_partial": true,
       "corr_eps_unscaled": true
     },
-    "_config_path": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/power_grid/configs/default.json"
+    "_config_path": "2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/power_grid/configs/default.json"
   },
   "history": {
     "epoch": [

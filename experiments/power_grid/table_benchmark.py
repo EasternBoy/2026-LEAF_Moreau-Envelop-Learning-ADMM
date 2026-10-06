@@ -8,7 +8,7 @@ repository root::
     python3 experiments/power_grid/table_benchmark.py --checkpoint DC3/results/power_grid-table-N96/checkpoint.pt
 
 The default input is the matching test_instances_*.npz file in
-results/power_grid/table/instances/. Inference runs on CPU, one instance at a
+results/power_grid/instances/. Inference runs on CPU, one instance at a
 time, with at most ``MAX_ITER`` DC3 correction iterations. The first call is a discarded
 warm-up. The timed interval is solver.solve(params), with params already on CPU.
 CLARABEL references are solved from the same saved inputs, outside DC3 timing.
@@ -29,6 +29,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
+from DC3.common.io_utils import display_path  # noqa: E402
 from DC3.common.metrics import per_instance_metrics  # noqa: E402
 from DC3.common.runner import build  # noqa: E402
 from DC3.power_grid.data import to_params  # noqa: E402
@@ -38,7 +39,7 @@ from DC3.power_grid.reference import solve_instance  # noqa: E402
 
 N = 192
 TABLE_DIR = REPO_ROOT / "results" / "power_grid" / "table"
-INSTANCE_DIR = TABLE_DIR / "instances"
+INSTANCE_DIR = REPO_ROOT / "results" / "power_grid" / "instances"
 OUTPUT_DIR = TABLE_DIR
 MAX_ITER = 200
 
@@ -155,8 +156,8 @@ def run(checkpoint: Path, instances: Path, output_dir: Path) -> None:
 
     summary = {
         "case_tag": case_tag,
-        "instances_file": str(instances),
-        "checkpoint": str(checkpoint),
+        "instances_file": display_path(instances),
+        "checkpoint": display_path(checkpoint),
         "samples": int(x0.size),
         "device": str(device),
         "dtype": str(dtype),
@@ -170,7 +171,7 @@ def run(checkpoint: Path, instances: Path, output_dir: Path) -> None:
         "solve_time_mean_ms": float(times.mean()),
         "solve_time_max_ms": float(times.max()),
         "solve_time_std_ms": float(times.std(ddof=1)) if times.size > 1 else 0.0,
-        "per_instance_file": str(csv_path),
+        "per_instance_file": display_path(csv_path),
     }
     with summary_path.open("x") as file:
         json.dump(summary, file, indent=2)

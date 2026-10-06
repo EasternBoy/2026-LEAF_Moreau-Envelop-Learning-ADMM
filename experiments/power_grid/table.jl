@@ -15,7 +15,8 @@ if Sys.isapple()
 end
 
 # Optional arguments (the defaults are the constants below):
-#   julia --project=. --threads=8 experiments/power_grid/table.jl [--N=96] [--gopt=0.1] [--model=<path>.npz] [--lme-model=<path>.npz --tag=<tag>] [--methods=MEL-ADMM,...]
+#   julia --project=. --threads=8 experiments/power_grid/table.jl [--N=96] [--gopt=0.1] [--samples=1000] [--model=<path>.npz] [--lme-model=<path>.npz --tag=<tag>] [--methods=MEL-ADMM,...]
+# --samples=<n> measures only the first n saved instances (quick runs).
 # --methods=<comma-separated list> runs a subset of the methods (IPOPT still gives the references).
 # --model / --lme-model replace the sMEL-ADMM / MEL-ADMM ICNN of problems/power_grid/setup.jl; the results go to
 # results/power_grid/table/<tag>/gap=<g_opt>/ instead of results/power_grid/table/gap=<g_opt>/.
@@ -30,7 +31,7 @@ const admm_tol = 1e-4
 const smel_feas_tol = 1e-4   # sMEL-ADMM returned-solution feasibility tolerance (residual: tol)
 const smel_gamma = parse(Float64, table_arg("smel-gamma", "1.6"))   # sMEL-ADMM over-relaxation of the z-update
 const admm_rho = 1.
-const nsamples = 1000
+const nsamples = parse(Int, table_arg("samples", "1000"))
 const g_opt = parse(Float64, table_arg("gopt", "0.1"))
 const s_mb = 24
 const model_tag = table_arg("tag", "")
@@ -61,13 +62,15 @@ include(joinpath(power_grid_problem_dir, "lme_admm.jl"))
 # Select the benchmark horizon without changing energy_mag() for other experiments.
 N = parse(Int, table_arg("N", "96"))
 const input_tag = "N=$(N)"
-const power_table_input_dir = joinpath(repo_root, "results", "power_grid", "table", "instances")
+const power_table_input_dir = joinpath(repo_root, "results", "power_grid", "instances")
 const input_file = joinpath(power_table_input_dir, "test_instances_$(input_tag).npz")
+# Written into metadata/markdown as `<repo name>/<relative path>`, without the machine-specific prefix.
+display_path(path) = joinpath(last(splitpath(repo_root)), relpath(path, repo_root))
 mpc_data = with_horizon(mpc_data, N; rho = admm_rho)   # normalized problem (energy_mag)
 
-const case_tag = "$(input_tag)_normalized_K=$(@sprintf("%.0e", mpc_data.K))_rho=$(admm_rho)_" *
-    @sprintf("optgap=%.6g_residual_ipopt=%.0e_admm=%.0e_others=%.0e_smelfeas=%.0e_smelgamma=%.2g",
-             g_opt, reference_tol, admm_tol, tol, smel_feas_tol, smel_gamma)
+# Output files are named <stem>_N=<N>.<ext>; the folder gives the model tag and g_opt, and the
+# metadata JSON records the full setup (scaling, ρ, tolerances, γ, samples, models).
+const case_tag = input_tag
 
 gap_percent(J, Jref) = 100 * abs(J - Jref) / max(abs(Jref), eps(Float64))
 
@@ -244,10 +247,10 @@ function main()
     instances = npzread(input_file)
     Int(only(instances["N"])) == N || error("Input horizon does not match N=$N.")
     Int(only(instances["seed"])) == seed || error("Input seed does not match seed=$seed.")
-    x0s = Vector{Float64}(instances["x0"])
-    loads = Matrix{Float64}(instances["load"])
-    gens = Matrix{Float64}(instances["gen"])
-    length(x0s) == nsamples || error("Input sample count does not match nsamples=$nsamples.")
+    length(instances["x0"]) >= nsamples || error("Input has fewer than nsamples=$nsamples instances.")
+    x0s = Vector{Float64}(instances["x0"][1:nsamples])
+    loads = Matrix{Float64}(instances["load"][1:nsamples, :])
+    gens = Matrix{Float64}(instances["gen"][1:nsamples, :])
     size(loads) == (nsamples, N) && size(gens) == size(loads) || error("Input forecast shapes are invalid.")
     all(isfinite, x0s) && all(isfinite, loads) && all(isfinite, gens) || error("Input contains nonfinite values.")
     all(loads .== loads[1:1, :]) && all(gens .== gens[1:1, :]) ||
@@ -278,7 +281,11 @@ function main()
             "note" => "all solvers use m/s_m, u/s_u, p/s_p, SOC x and cost J/K; objectives, gaps and violations are of the normalized problem"),
         "icnn_model" => POWER_GRID_MODEL,
         "icnn_model_lme" => POWER_GRID_LME_MODEL,
-        "case_tag" => case_tag, "source_instances_file" => input_file,
+        "setup" => Dict("normalized" => true, "cost_scale_K" => mpc_data.K, "rho" => admm_rho,
+            "g_opt_pct" => g_opt, "tol_ipopt_reference" => reference_tol, "tol_admm" => admm_tol,
+            "tol_others" => tol, "smel_feas_tol" => smel_feas_tol, "smel_gamma" => smel_gamma,
+            "max_iter" => max_iter, "samples" => nsamples),
+        "case_tag" => case_tag, "source_instances_file" => display_path(input_file),
         "reference_instances_file" => basename(files[1]),
         "results_file" => basename(files[2]), "summary_file" => basename(files[3]),
         "table_file" => basename(files[5]),
@@ -297,7 +304,7 @@ function main()
         "timing" => "Existing solver-returned seconds; split solver uses internal elapsed time",
         "summary_std" => "Sample standard deviation across all measured instances, not standard error",
         "madnlp_gap_callback" => madnlp_gap_callback,
-        "DC3" => "Not run; use $input_file with CLARABEL as its reference solver")
+        "DC3" => "Not run; use $(display_path(input_file)) with CLARABEL as its reference solver")
     open(files[4], "w") do io
         JSON3.pretty(io, metadata)
     end
@@ -363,7 +370,7 @@ function render_results(summaries, path)
     md = """
 # Power-grid benchmark: solving time and optimality gap
 
-Generated by `experiments/power_grid/table.jl` from `$input_file`.
+Generated by `experiments/power_grid/table.jl` from `$(display_path(input_file))`.
 The stopping condition is $condition. Results use $nsamples measured instances;
 solving time is in ms, shown as mean (maximum), and optimality gap is in %, shown
 as mean ± sample standard deviation (maximum). Constraint violation is the largest

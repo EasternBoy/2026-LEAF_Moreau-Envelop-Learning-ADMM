@@ -98,7 +98,7 @@ command-line options; set them before running:
 ## Test instances
 Shared by the Julia methods and DC3:
 
-  python experiments/power_grid/generate_table_instances.py --N 96    # results/power_grid/table/instances/test_instances_N=96.npz
+  python experiments/power_grid/generate_table_instances.py --N 96    # results/power_grid/instances/test_instances_N=96.npz
 
 ## Julia methods (IPOPT, MadNLP, ADMM, MEL-ADMM, sMEL-ADMM)
 MEL-ADMM runs threaded mini-batches, so Julia needs more than one thread:
@@ -107,8 +107,9 @@ MEL-ADMM runs threaded mini-batches, so Julia needs more than one thread:
 
 This first solves IPOPT references (tol 1e-10) on every instance, then runs each
 method until `g_opt` is reached. Outputs go to results/power_grid/table/gap=<g_opt>/:
-`results_*.csv` (per instance), `summary_*.csv`, `metadata_*.json`,
-`ipopt_references_*.npz` and the rendered `table_*.md`. All methods solve the normalized
+`results_N=<N>.csv` (per instance), `summary_N=<N>.csv`, `metadata_N=<N>.json` (the full
+setup: scaling, ρ, tolerances, γ, samples, models), `ipopt_references_N=<N>.npz` and the
+rendered `table_N=<N>.md`. All methods solve the normalized
 problem of `energy_mag()` (m/800, u/700, p/100, SOC x; cost J/K with K = 2e4; ρ = 1), so
 objectives and constraint violations are in normalized units (gaps are unchanged).
 MEL-ADMM and sMEL-ADMM use the ICNNs loaded in problems/power_grid/setup.jl:

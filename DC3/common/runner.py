@@ -22,7 +22,7 @@ import torch
 
 from .completion import LinearCompletion
 from .dc3 import DC3Config, DC3Solver, train_dc3
-from .io_utils import DC3_ROOT, environment_report, load_json, save_csv, save_json, set_seed
+from .io_utils import DC3_ROOT, display_path, environment_report, load_json, save_csv, save_json, set_seed
 from .metrics import aggregate, format_table, per_instance_metrics
 from .problem import ParametricProblem
 from .timing import measure, summarize, sync
@@ -48,7 +48,7 @@ def load_config(spec: AppSpec, path: Optional[str]) -> dict:
     cfg.setdefault("data", {})
     cfg.setdefault("partition", {"strategy": "explicit"})
     cfg.setdefault("dc3", {})
-    cfg["_config_path"] = os.path.abspath(path)
+    cfg["_config_path"] = display_path(path)
     return cfg
 
 
@@ -308,7 +308,7 @@ def run_benchmark(spec: AppSpec, cfg: dict, tag: str = "", checkpoint: Optional[
         "feas_tol": tol,
         "train_time_s": train_time,
         "n_net_params": solver.net.n_params(),
-        "instances_file": inst_path,
+        "instances_file": display_path(inst_path),
     }
 
     J_ref = None

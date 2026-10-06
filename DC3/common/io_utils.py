@@ -16,6 +16,14 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DC3_ROOT = os.path.join(REPO_ROOT, "DC3")
 
 
+def display_path(path) -> str:
+    """Path as written into reports: `<repo name>/<path relative to repo>`, no machine-specific prefix."""
+    path = os.path.abspath(path)
+    if os.path.commonpath([path, REPO_ROOT]) != REPO_ROOT:
+        return path
+    return os.path.join(os.path.basename(REPO_ROOT), os.path.relpath(path, REPO_ROOT))
+
+
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)

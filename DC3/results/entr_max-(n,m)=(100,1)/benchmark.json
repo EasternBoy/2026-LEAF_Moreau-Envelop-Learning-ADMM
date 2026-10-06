@@ -59,7 +59,7 @@
       "lr_decay": 0.995,
       "output_weight_scale": 0.0
     },
-    "_config_path": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/entr_max/configs/small.json"
+    "_config_path": "2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/entr_max/configs/small.json"
   },
   "partition": {
     "strategy": "explicit",
@@ -190,7 +190,7 @@
   "feas_tol": 0.0001,
   "train_time_s": 3957.9768041266652,
   "n_net_params": 367715,
-  "instances_file": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/results/entr_max-(n,m)=(100,1)/test_instances.npz",
+  "instances_file": "2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/results/entr_max-(n,m)=(100,1)/test_instances.npz",
   "reference": {
     "solver": "CLARABEL",
     "status_counts": {

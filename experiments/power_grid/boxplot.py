@@ -12,7 +12,6 @@ exact zeros are drawn at ``FLOOR``.
 from __future__ import annotations
 
 import csv
-import glob
 import os
 
 import matplotlib.pyplot as plt
@@ -41,17 +40,12 @@ METHODS = [
 
 
 def julia_results_file(N: int) -> str:
-    # Julia prints integral floating-point values compactly (1.0 as "1") in
-    # result filenames, while the enclosing directory retains Python's "1.0".
-    optgap_token = format(G_OPT, "g")
-    pattern = os.path.join(OUT, f"results_N={N}_*optgap={optgap_token}_*.csv")
-    matches = sorted(glob.glob(pattern))
-    if len(matches) != 1:
+    path = os.path.join(OUT, f"results_N={N}.csv")
+    if not os.path.isfile(path):
         raise FileNotFoundError(
-            f"Expected one Julia result matching {pattern}, found {len(matches)}. "
-            f"Run experiments/power_grid/table.jl with N={N} and g_opt={G_OPT}."
+            f"Missing {path}. Run experiments/power_grid/table.jl with N={N} and g_opt={G_OPT}."
         )
-    return matches[0]
+    return path
 
 
 def read_columns(path: str) -> dict[str, np.ndarray]:

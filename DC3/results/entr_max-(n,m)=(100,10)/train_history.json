@@ -56,7 +56,7 @@
       "lr_decay": 0.995,
       "output_weight_scale": 0.0
     },
-    "_config_path": "/Users/duongtran/GitHub/2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/entr_max/configs/small.json"
+    "_config_path": "2026-LEAF_Moreau-Envelop-Learning-ADMM/DC3/entr_max/configs/small.json"
   },
   "history": {
     "epoch": [

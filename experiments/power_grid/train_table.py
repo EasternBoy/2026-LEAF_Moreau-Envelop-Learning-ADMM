@@ -26,7 +26,7 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from DC3.common.io_utils import DC3_ROOT  # noqa: E402
+from DC3.common.io_utils import DC3_ROOT, display_path  # noqa: E402
 from DC3.common.runner import add_common_args, apply_overrides, load_config, run_training  # noqa: E402
 from DC3.power_grid.data import to_params  # noqa: E402
 from DC3.power_grid.experiment import SPEC  # noqa: E402
@@ -65,7 +65,7 @@ def main() -> None:
     cfg["data"]["N"] = N
     cfg["data"]["x0_lo"] = X0_LO
     cfg["data"]["x0_hi"] = X0_HI
-    cfg["data"]["table_instances_file"] = str(instances)
+    cfg["data"]["table_instances_file"] = display_path(instances)
     cfg["dc3"]["device"] = "cpu"
     cfg["dc3"]["dtype"] = "float64"
     tag = args.tag or f"table-N{N}"

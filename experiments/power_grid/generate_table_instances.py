@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from DC3.power_grid.data import read_series  # noqa: E402
 
 
-OUTPUT_DIR = REPO_ROOT / "results" / "power_grid" / "table" / "instances"
+OUTPUT_DIR = REPO_ROOT / "results" / "power_grid" / "instances"
 X0_LO, X0_HI = 0.25, 0.75
 
 
