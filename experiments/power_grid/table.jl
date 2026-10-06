@@ -16,6 +16,8 @@ end
 
 # Optional arguments (the defaults are the constants below):
 #   julia --project=. --threads=8 experiments/power_grid/table.jl [--N=96] [--gopt=0.1] [--samples=1000] [--model=<path>.npz] [--lme-model=<path>.npz --tag=<tag>] [--methods=MEL-ADMM,...]
+# --tol-ip=<t> / --tol=<t> / --tol-admm=<t>: residual tolerance of IPOPT and MadNLP / MEL- and sMEL-ADMM / ADMM
+#   (defaults 1e-2 / 1e-2 / 1e-4); the IPOPT reference solve always uses reference_tol = 1e-10.
 # --samples=<n> measures only the first n saved instances (quick runs).
 # --methods=<comma-separated list> runs a subset of the methods (IPOPT still gives the references).
 # --model / --lme-model replace the sMEL-ADMM / MEL-ADMM ICNN of problems/power_grid/setup.jl; the results go to
@@ -26,14 +28,28 @@ function table_arg(name, default)
 end
 
 const FloatType = Float64
-const tol = 1e-2
-const admm_tol = 1e-4
+# Residual tolerances, settable on the command line: --tol-ip (IPOPT, MadNLP benchmark solves),
+# --tol (MEL-ADMM, sMEL-ADMM), --tol-admm (ADMM).
+const tol_ip = parse(Float64, table_arg("tol-ip", "1e-2"))
+const tol = parse(Float64, table_arg("tol", "1e-2"))
+const admm_tol = parse(Float64, table_arg("tol-admm", "1e-4"))
 const smel_feas_tol = 1e-4   # sMEL-ADMM returned-solution feasibility tolerance (residual: tol)
 const smel_gamma = parse(Float64, table_arg("smel-gamma", "1.6"))   # sMEL-ADMM over-relaxation of the z-update
 const admm_rho = 1.
 const nsamples = parse(Int, table_arg("samples", "1000"))
 const g_opt = parse(Float64, table_arg("gopt", "0.1"))
-const s_mb = 24
+# sMEL-ADMM timing: "inline" times each iteration and pauses the timer for the checks;
+# "two-pass" runs once with the checks (untimed) to get the stopping iteration i, then times a
+# second run of exactly i iterations without checks (it must return the same v).
+const timing_mode = table_arg("timing", "inline")
+# sMEL-ADMM is solved `repeats` times per instance and its reported time is the minimum, which
+# removes one-off slowdowns of the machine (OS scheduling, GC) from its ~5 ms solves.  The solves
+# are deterministic, so the solution, gap and iterations of the first solve are reported (and
+# checked to repeat).  The other methods are solved once.
+const repeats = parse(Int, table_arg("repeats", "2"))
+repeats >= 1 || error("--repeats must be at least 1")
+timing_mode in ("inline", "two-pass") || error("--timing must be inline or two-pass")
+const s_mb = parse(Int, table_arg("smb", "24"))   # time steps per threaded ICNN-gradient chunk (MEL-/sMEL-ADMM)
 const model_tag = table_arg("tag", "")
 const POWER_GRID_MODEL = table_arg("model", "models/power_grid/power_grid_rho=1-sLME_ADMM-hl=16.npz")
 const POWER_GRID_LME_MODEL = table_arg("lme-model", "models/power_grid/power_grid_rho=1-LME_ADMM-hl=16.npz")
@@ -47,7 +63,9 @@ const feas_tol = 1e-6
 const reference_tol = 1e-10
 const methods = split(table_arg("methods", "IPOPT,MadNLP,ADMM,MEL-ADMM,sMEL-ADMM"), ",")   # e.g. --methods=MEL-ADMM
 
-residual_tolerance(name) = name == "IPOPT" ? reference_tol : name == "ADMM" ? admm_tol : tol
+# The IPOPT ground truth is a separate reference solve at reference_tol; the IPOPT row of the
+# table is a benchmark solve that stops, like the others, at the gap target and residual tol.
+residual_tolerance(name) = name in ("IPOPT", "MadNLP") ? tol_ip : name == "ADMM" ? admm_tol : tol
 feasibility_tolerance(name) = name == "sMEL-ADMM" ? smel_feas_tol : residual_tolerance(name)
 
 # Initialize Gurobi only when a selected method needs it.
@@ -201,12 +219,23 @@ function admm_runner(name, target)
             solve(x0, load, gen, split_cb; tol = solver_tol, max_iter = max_iter,
                   feas_tol = feasibility_tolerance(name), γ = smel_gamma)
         end
-        if name in ("MEL-ADMM", "sMEL-ADMM")
+        if name == "sMEL-ADMM" && timing_mode == "two-pass"
+            v_checked = copy(result[1])
+            timed = solve(x0, load, gen; γ = smel_gamma, fixed_iter = target.iterations)
+            timed[1] == v_checked || error("two-pass timing: the timed run differs from the checked run")
+            result = (v_checked, timed[2])
+        end
+        if name == "sMEL-ADMM"
             target.reached = target.reached && target.residual < solver_tol &&
                 eco_solution_feasible(d, result[1], x0, load, gen, feasibility_tolerance(name))
+        elseif name == "MEL-ADMM"   # w is a QP projection: gap and feasibility, as ADMM (no residual test)
+            target.reached = target.reached &&
+                eco_solution_feasible(d, result[1], x0, load, gen, feasibility_tolerance(name))
         end
-        stopping_mode = if name in ("MEL-ADMM", "sMEL-ADMM")
+        stopping_mode = if name == "sMEL-ADMM"
             "gap_residual_and_feasibility"
+        elseif name == "MEL-ADMM"
+            "gap_and_feasibility"
         else
             "gap_callback_with_solver_termination"
         end
@@ -282,9 +311,12 @@ function main()
         "icnn_model" => POWER_GRID_MODEL,
         "icnn_model_lme" => POWER_GRID_LME_MODEL,
         "setup" => Dict("normalized" => true, "cost_scale_K" => mpc_data.K, "rho" => admm_rho,
-            "g_opt_pct" => g_opt, "tol_ipopt_reference" => reference_tol, "tol_admm" => admm_tol,
-            "tol_others" => tol, "smel_feas_tol" => smel_feas_tol, "smel_gamma" => smel_gamma,
-            "max_iter" => max_iter, "samples" => nsamples),
+            "g_opt_pct" => g_opt, "tol_ipopt_reference" => reference_tol, "tol_ip" => tol_ip, "tol_admm" => admm_tol,
+            "tol_mel_smel" => tol, "smel_feas_tol" => smel_feas_tol, "smel_gamma" => smel_gamma,
+            "max_iter" => max_iter, "samples" => nsamples, "s_mb" => s_mb,
+            "smel_timing" => timing_mode,
+            "timing_repeats_smel" => repeats,
+            "timing_statistic" => "sMEL-ADMM: minimum of its repeats per instance; other methods: one solve"),
         "case_tag" => case_tag, "source_instances_file" => display_path(input_file),
         "reference_instances_file" => basename(files[1]),
         "results_file" => basename(files[2]), "summary_file" => basename(files[3]),
@@ -322,6 +354,16 @@ function main()
         for (name, runner) in zip(methods, runners)
             run = runner(x0s[k], load, gen)
             row = result_row(name, target, run, k, x0s[k], load, gen)
+            times = [run.seconds]
+            for _ in 2:repeats
+                rerun = runner(x0s[k], load, gen)
+                rerun.iterations == run.iterations ||
+                    error("$name, sample $k: a repeated solve took $(rerun.iterations) instead of $(run.iterations) iterations")
+                push!(times, rerun.seconds)
+            end
+            row = merge(row, (; solve_time_ms = 1000 * minimum(times),
+                                solve_time_min_ms = 1000 * minimum(times),
+                                solve_time_max_ms = 1000 * maximum(times), repeats = length(times)))
             push!(rows, row)
             # Save every result, including iteration-limited runs.
             CSV.write(files[2], DataFrame([row]); append = length(rows) > 1)
@@ -366,13 +408,14 @@ function render_results(summaries, path)
                             s.solver, s.residual_tol, timing, gap, violation))
     end
     condition = "`g_opt ≤ $(g_opt)%` plus each solver's native checks; " *
-        "MEL-ADMM and sMEL-ADMM also require their residual tolerance and returned-solution feasibility"
+        "MEL-ADMM also requires returned-solution feasibility, and sMEL-ADMM its residual tolerance and returned-solution feasibility"
     md = """
 # Power-grid benchmark: solving time and optimality gap
 
 Generated by `experiments/power_grid/table.jl` from `$(display_path(input_file))`.
 The stopping condition is $condition. Results use $nsamples measured instances;
-solving time is in ms, shown as mean (maximum), and optimality gap is in %, shown
+solving time is in ms (for sMEL-ADMM, per instance the minimum of $repeats solves), shown as mean (maximum) over the
+instances, and optimality gap is in %, shown
 as mean ± sample standard deviation (maximum). Constraint violation is the largest
 violation of the original power-grid constraints and is shown as mean (maximum).
 **Bold** marks the lowest mean solving time. Warm-up runs and IPOPT reference-solve

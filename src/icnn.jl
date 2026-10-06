@@ -214,14 +214,16 @@ end
 mini_batch(local_gradients::NTuple, batch::Vector{FloatType}) = mini_batch!(similar(batch), local_gradients, batch)
 
 # Column chunks of a matrix: `local_gradients` built with `gradient_struct(model, s_mb, dim)`.
-@inbounds function mini_batch(local_gradients::NTuple, batch::AbstractMatrix)
+# mini_batch! writes the gradient into `out` (no allocation); mini_batch returns a new matrix.
+@inbounds function mini_batch!(out::AbstractMatrix, local_gradients::NTuple, batch::AbstractMatrix)
     s_mb      = column_chunk(local_gradients[1])
     data_size = size(batch, 2)
     n_mb      = div(data_size - 1, s_mb) + 1
-    out       = copy(batch)
     @threads for i in 1:n_mb
         r = i == n_mb ? ((data_size - s_mb + 1):data_size) : ((i-1)*s_mb+1:i*s_mb)
         @views out[:, r] .= local_gradients[i](batch[:, r])
     end
     return out
 end
+
+mini_batch(local_gradients::NTuple, batch::AbstractMatrix) = mini_batch!(similar(batch), local_gradients, batch)

@@ -30,6 +30,7 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
     w      = zeros(FloatType, data.dim, data.N)
     α      = zeros(FloatType, data.dim, data.N)
     buffer = zeros(FloatType, data.dim, data.N)
+    grad   = zeros(FloatType, data.dim, data.N)   # ICNN gradient, written in place each iteration
 
     n_mb = div(data.N-1, column_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
@@ -51,7 +52,8 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
                 # ==== z-update ====
                 start_time = time()
                 @. buffer = w + α
-                z .= buffer .- mini_batch(local_gradients, buffer)./ρ
+                mini_batch!(grad, local_gradients, buffer)
+                z .= buffer .- grad./ρ
                 @. z = γ * z + (1 - γ)* w
 
                 total_time += time() - start_time
@@ -74,10 +76,13 @@ function LME_ADMM(data::MPCData_eco, gradient::gradient_struct, aux_sol::Functio
                     CALL_BACK_STATUS = callback(z, w, α, i, J, total_time)
                 end
 
+                # w is the QP projection onto all constraints, so (as ADMM_eco_iter) a callback
+                # (e.g. an optimality-gap target) replaces the consensus residual test; the
+                # returned w must still be feasible.
                 residual = maximum(abs, buffer)
                 feasible = eco_solution_feasible(data, w, x0, load_fc, gen_fc, tol)
-                TERMINATION_STATUS = residual < tol && feasible &&
-                                     (callback === nothing || CALL_BACK_STATUS)
+                TERMINATION_STATUS = feasible &&
+                                     (callback === nothing ? residual < tol : CALL_BACK_STATUS)
 
                 if TERMINATION_STATUS
                     if verbose  println("Learning ADMM converges at iteration $i with objective value = $J")  end
@@ -107,6 +112,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
     β = copy(z)
     buffer1 = copy(z)
     buffer2 = copy(buffer1)
+    grad    = zeros(FloatType, data.dim, data.N)   # ICNN gradient, written in place each iteration
 
     n_mb = div(data.N - 1, column_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb)
@@ -122,21 +128,19 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
         return @inbounds function solver(init::FloatType, load_fc::Vector{FloatType}, gen_fc::Vector{FloatType}, callback = nothing; 
             tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false,
             feas_tol::FloatType = tol,  # feasibility tolerance of the returned v
-            γ::FloatType = 1.0)         # over-relaxation of the z-update (1 = none)
+            γ::FloatType = 1.0,         # over-relaxation of the z-update (1 = none)
+            fixed_iter::Int = 0)        # > 0: run exactly this many iterations, no checks, one timer
 
             for state in (z, w, v, α, β, buffer1, buffer2)
                 fill!(state, 0.)
             end
 
-            J = 0
-            total_time = 0.
-
-            for i in 1:max_iter
-                start_time = time_ns()
+            # One sMEL-ADMM iteration: z-, v-, w-updates and the dual update.
+            function iterate!()
                 # ==== z-update ====
                 buffer1 .= v .+ β
-                @views z[1:dim, :] .= buffer1[1:dim, :] .-
-                    mini_batch(local_gradients, buffer1[1:dim, :])./ρ
+                @views mini_batch!(grad, local_gradients, buffer1[1:dim, :])
+                @views z[1:dim, :] .= buffer1[1:dim, :] .- grad./ρ
                 @views copyto!(z[dim+1, :], buffer1[dim+1, :])  # no learning for state variable
                 γ == 1 || (@. z = γ * z + (1 - γ) * v)
 
@@ -144,7 +148,7 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 # Use the equality constraints in v-update
                 @. buffer1 = (z - β + w + α)/2
                 v .= aux_sol(buffer1, init, load_fc, gen_fc)
-                
+
                 # ==== w-update ====
                 # Use the inequality constraints in v-update
                 @. w = v - α
@@ -154,13 +158,32 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 @views clamp!(w[4,:], x_min, x_max)
                 w[4,N] = clamp(w[4,N], max(x_min, x_end_min), x_max)  # terminal bound
 
-                ## ============== Calculate dual variables and check termination ===========
+                ## ============== Calculate dual variables ===========
                 @. buffer1  = w - v
                 @. buffer2  = v - z
                 α .+= buffer1
                 β .+= buffer2
+                return nothing
+            end
 
+            # Timing pass of a two-pass benchmark: the iteration count comes from a checked run.
+            if fixed_iter > 0
+                start_time = time_ns()
+                for _ in 1:fixed_iter
+                    iterate!()
+                end
+                return v, (time_ns() - start_time) / 1e9
+            end
+
+            J = 0
+            total_time = 0.
+
+            for i in 1:max_iter
+                start_time = time_ns()
+                iterate!()
                 total_time += time_ns() - start_time
+
+                ## ============== Check termination ===========
                 CALL_BACK_STATUS = false
                 J = get_objective(data, v)
 
@@ -174,7 +197,6 @@ function LME_ADMM_split(data::MPCData_eco, gradient::gradient_struct, aux_sol::F
                 TERMINATION_STATUS = residual < tol && feasible &&
                                      (callback === nothing || CALL_BACK_STATUS)
 
-                ## ============== Check termination ===========
                 if TERMINATION_STATUS
                     if verbose
                         println("Learning ADMM spliting constraints (v-update) converges at iteration $i with objective value = $J")

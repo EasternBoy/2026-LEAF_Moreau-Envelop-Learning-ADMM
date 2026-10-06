@@ -28,12 +28,21 @@ function dynamics_projection(mpc_data::MPCData_eco)
     Ms = sparse(M)
 
     # y = q - M'*(M*M')^(-1)*(M*q-b), equivalent to the full KKT solve.
-    F = cholesky(Symmetric(Ms * Ms'))
+    # M M' = P' L L' P (sparse Cholesky); the solve is two in-place sparse triangular
+    # solves with the stored factors, so a call allocates nothing.
+    F  = cholesky(Symmetric(Ms * Ms'))
+    Lf = LowerTriangular(sparse(F.L))
+    Uf = UpperTriangular(sparse(sparse(F.L)'))
+    perm = F.p
     query = zeros(FloatType, 4N)
     residual = zeros(FloatType, 2N)
+    multipliers = zeros(FloatType, 2N)
+    permuted = zeros(FloatType, 2N)
     result = zeros(FloatType, 4, N)
 
-    let F  = F,
+    let Lf = Lf,
+        Uf = Uf,
+        perm = perm,
         Ms = Ms,
         N  = N,
         A  = A,
@@ -47,7 +56,14 @@ function dynamics_projection(mpc_data::MPCData_eco)
             for k in 1:N
                 residual[N+k] -= (load_fc[k] - gen_fc[k]) / s_m
             end
-            multipliers = F \ residual
+            for j in eachindex(perm)                      # multipliers = (M M') \ residual
+                permuted[j] = residual[perm[j]]
+            end
+            ldiv!(Lf, permuted)
+            ldiv!(Uf, permuted)
+            for j in eachindex(perm)
+                multipliers[perm[j]] = permuted[j]
+            end
             mul!(query, Ms', multipliers, -1.0, 1.0)
             for r in 1:4, k in 1:N
                 result[r,k] = query[(r-1)*N+k]
