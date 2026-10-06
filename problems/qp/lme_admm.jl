@@ -1,19 +1,9 @@
 using LDLFactorizations
 using LMEADMM   # src/LMEADMM.jl
 
-function qp_projection(data::data_opt)
-    # Affine constraints on [y; s/D], D_i = ||G_i||₂.
-    slack_scale = vec(sqrt.(sum(abs2, data.G; dims = 2)))
-    M = [sparse(data.A) spzeros(data.neq, data.nineq);
-         sparse(data.G ./ slack_scale) sparse(I, data.nineq, data.nineq)]
-    proj = AffineProjection(kkt_matrix(M),
-                            var_scale(data) .* [data.x; data.h ./ slack_scale])
-    return (proj = proj, slack_scale = slack_scale)
-end
-
-@inbounds function sLME_ADMM(data::data_opt, gradient::gradient_struct;
-    tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false,
-    projection = nothing)
+@inbounds function sLME_ADMM(data::data_opt, gradient::gradient_struct,
+    callback::Union{Function, Nothing} = nothing;
+    tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false)
 
     n = data.n
     m = data.nineq
@@ -28,17 +18,23 @@ end
     buffer1 = copy(z)
     buffer2 = copy(z)
     grad    = zeros(FloatType, n)   # ∇ICNN at buffer1[1:n]
+    x_obj   = zeros(FloatType, n)
+
+    n_mb = div(n-1, vector_chunk(gradient)) + 1
+    local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
+
+    # equality constraints on [y; s/D], D_i = ||G_i||₂.
+    slack_scale = vec(sqrt.(sum(abs2, data.G; dims = 2)))
+    M = [sparse(data.A) spzeros(data.neq, m); sparse(data.G ./ slack_scale) sparse(I, m, m)]
+    K = kkt_matrix(M)
 
     start_time    = time_ns()
-    prepared = projection === nothing ? qp_projection(data) : projection
-    proj = prepared.proj
-    @views proj.RHS[n+m+1:n+m+data.neq] .= scale .* data.x
-    @views proj.RHS[n+m+data.neq+1:end] .= scale .* data.h ./ prepared.slack_scale
+    proj = AffineProjection(K, scale .* [data.x; data.h ./ slack_scale])
 
     for i in 1:max_iter
         # ==== z-update ====
         @. buffer1 = v + β
-        copyto!(grad, gradient(view(buffer1, 1:n)))
+        mini_batch!(grad, local_gradients, view(buffer1, 1:n))
         @views @. z[1:n] = buffer1[1:n] - grad/ρ
         @views z[n+1:n+m] .= buffer1[n+1:n+m]
 
@@ -60,7 +56,13 @@ end
         @. β += buffer2
 
         residual = max(maximum(abs, buffer1), maximum(abs, buffer2))
-        TERMINATION_STATUS = residual < tol
+        CALL_BACK_STATUS = true
+        if callback !== nothing
+            @views @. x_obj = v[1:n] / scale
+            J = get_objective(data, x_obj)
+            CALL_BACK_STATUS = callback(z, w, α, v, β, i, J, (time_ns() - start_time)/1e9)
+        end
+        TERMINATION_STATUS = CALL_BACK_STATUS && (residual < tol)
 
         ## ============== Check termination ===========
         if TERMINATION_STATUS
