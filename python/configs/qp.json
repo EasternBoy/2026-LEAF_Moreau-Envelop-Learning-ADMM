@@ -3,9 +3,9 @@
   "test_data": "data/qp/training/qp-admm20-rho=1.0-test.npz",
   "output": "models/qp/qp-julia-moreau-rho=1.npz",
   "_note": "Same supervised value + gradient training as entropy, with 100-dimensional QP inputs from the first 20% of exact split-ADMM iterations.",
-  "weight_act": "relu",
+  "weight_act": "softplus",
   "keep_best": true,
-  "export_act": "relu",
+  "export_act": "softplus",
   "lower_bound": false,
   "train": {
     "widths": [

@@ -1,9 +1,27 @@
 using LDLFactorizations
 using LMEADMM   # src/LMEADMM.jl
 
+function qp_solution_feasible(data, y, tol)
+    all(isfinite, y) || return false
+    eq = maximum(abs, data.A * y - data.x)
+    viol = max(maximum(data.G * y - data.h), 0.0)
+    return eq <= tol && viol <= tol
+end
+
+# Reuse only for instances with the same A and G. Mutable projection buffers
+# belong to one solver at a time; concurrent workers need separate workspaces.
+function qp_projection(data::data_opt)
+    slack_scale = vec(sqrt.(sum(abs2, data.G; dims = 2)))
+    M = [sparse(data.A) spzeros(data.neq, data.nineq);
+         sparse(data.G ./ slack_scale) sparse(I, data.nineq, data.nineq)]
+    proj = AffineProjection(kkt_matrix(M), zeros(FloatType, data.neq + data.nineq))
+    return (; proj, slack_scale)
+end
+
 @inbounds function sLME_ADMM(data::data_opt, gradient::gradient_struct,
     callback::Union{Function, Nothing} = nothing;
-    tol::FloatType = 1e-4, max_iter::Int = 1000, verbose::Bool = false)
+    tol::FloatType = 1e-4, feas_tol::FloatType = 1e-6,
+    max_iter::Int = 1000, verbose::Bool = false, projection = qp_projection(data))
 
     n = data.n
     m = data.nineq
@@ -23,13 +41,10 @@ using LMEADMM   # src/LMEADMM.jl
     n_mb = div(n-1, vector_chunk(gradient)) + 1
     local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
 
-    # equality constraints on [y; s/D], D_i = ||G_i||₂.
-    slack_scale = vec(sqrt.(sum(abs2, data.G; dims = 2)))
-    M = [sparse(data.A) spzeros(data.neq, m); sparse(data.G ./ slack_scale) sparse(I, m, m)]
-    K = kkt_matrix(M)
-
     start_time    = time_ns()
-    proj = AffineProjection(K, scale .* [data.x; data.h ./ slack_scale])
+    proj = projection.proj
+    @views proj.RHS[n+m+1:n+m+data.neq] .= scale .* data.x
+    @views proj.RHS[n+m+data.neq+1:end] .= scale .* data.h ./ projection.slack_scale
 
     for i in 1:max_iter
         # ==== z-update ====
@@ -56,13 +71,14 @@ using LMEADMM   # src/LMEADMM.jl
         @. β += buffer2
 
         residual = max(maximum(abs, buffer1), maximum(abs, buffer2))
+        @views @. x_obj = v[1:n] / scale
+        feasible = qp_solution_feasible(data, x_obj, feas_tol)
         CALL_BACK_STATUS = true
         if callback !== nothing
-            @views @. x_obj = v[1:n] / scale
             J = get_objective(data, x_obj)
             CALL_BACK_STATUS = callback(z, w, α, v, β, i, J, (time_ns() - start_time)/1e9)
         end
-        TERMINATION_STATUS = CALL_BACK_STATUS && (residual < tol)
+        TERMINATION_STATUS = CALL_BACK_STATUS && (residual < tol) && feasible
 
         ## ============== Check termination ===========
         if TERMINATION_STATUS

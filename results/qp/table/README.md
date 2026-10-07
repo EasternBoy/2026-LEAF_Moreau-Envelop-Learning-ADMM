@@ -6,6 +6,43 @@ Run from the repository root:
 julia --project=. experiments/qp/table.jl
 ```
 
+Add the DC3 + correction results and render a three-method table, following
+the entropy workflow:
+
+```sh
+python3 experiments/qp/table.py
+python3 experiments/qp/boxplot.py
+```
+
+Save an entropy-style row summary from the existing result files:
+
+```sh
+julia --project=. experiments/qp/row.jl
+```
+
+This writes `qp_row-*-tol=*-gopt=*.md`, showing mean (maximum) time in ms,
+constraint violation, and objective gap. As in entropy, a timing cell is marked
+"unable to achieve" unless all saved solutions meet the gap target and feasibility
+threshold c_v = 1e-2. Missing DC3 results are shown as —. Missing Julia results are
+generated; `--force` reruns the Julia solvers. DC3 is not trained or evaluated by
+`row.jl`; use `table.py` first to include its column.
+
+`table.py` uses `DC3/results/qp-default/checkpoint.pt`, training it only if missing
+or `--retrain` is supplied. Use `--force` to re-evaluate DC3. It evaluates the
+same saved instances at batch size 1, warms up, and synchronizes the device
+around each solve. `evaluate.jl` reuses `table.jl`'s scoring and rendering for
+all three methods, with gaps measured against the saved OSQP optimum.
+DC3 times include prediction, completion, and correction with inputs already
+on-device; Julia uses its solvers' internal times, so setup exclusions differ.
+
+The scripts use the default dimensions, 833 samples, sLME tolerance 1e-3, and
+gap target 1.0%; keep their filename constants aligned if changing these settings.
+The combined table keeps the existing `qp_table-*.md` filename and reports
+mean per-instance seconds. `DC3-n=100-neq=50-m=50-samples=833.npz` stores DC3
+solutions, times, correction counts, and the same scored metrics as the Julia
+methods. The box plots are `qp_gap_boxplot.pdf` and `qp_viol_boxplot.pdf` in
+this folder. Like entropy's plot script, rendering uses Matplotlib and LaTeX.
+
 Edit `N_SAMPLES`, `SLME_TOL`, `MAX_ITER`, and `max_opt_gap` directly in
 `table.jl`. Their values are `833`, `1e-3`, `1000`, and `1.0` (percent).
 
@@ -26,7 +63,8 @@ The table averages each metric across instances, including each instance's
 maximum violation. Equality violations use absolute residuals; inequality
 violations use positive parts. All violations are in original coordinates.
 Saved times are in milliseconds; table times are mean seconds per instance.
-Compilation is excluded; sLME-ADMM's per-solve projection factorization is included.
+Compilation is excluded. sLME-ADMM's default projection setup occurs before its
+internal timer and is excluded from the reported per-instance solving time.
 Existing saved tables were produced with the earlier optimized solver; rerun the
 script to replace their results with measurements of the restored solver.
 

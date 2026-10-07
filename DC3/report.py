@@ -188,7 +188,14 @@ def write_report(app: str, tag: str = "") -> str:
         ("mean_ms", "mean ms", ".4g"), ("p90_ms", "p90 ms", ".4g"),
         ("per_inst_ms", "ms/instance", ".4g"), ("thru", "inst/s", ".5g")]), "```", ""]
 
-    if julia is None:
+    if julia is None and app == "qp":
+        lines += [
+            "## Julia baselines", "",
+            "Run `julia --project=. experiments/qp/table.jl` for the",
+            "same saved QP inputs. Its table reports mean per-instance solver time;",
+            "use the DC3 batch-1 timing for a per-instance comparison.", "",
+        ]
+    elif julia is None:
         lines += [
             "## Julia baselines",
             "",
@@ -271,7 +278,7 @@ def _plots(app, tag, out_dir, bench, julia):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--app", required=True, choices=["entr_max", "power_grid"])
+    ap.add_argument("--app", required=True, choices=["entr_max", "power_grid", "qp"])
     ap.add_argument("--tag", default="")
     a = ap.parse_args()
     write_report(a.app, a.tag)

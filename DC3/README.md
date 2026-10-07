@@ -3,12 +3,13 @@
 An implementation of **DC3 — Deep Constraint Completion and Correction**
 ([Donti, Rolnick & Kolter, ICLR 2021](https://arxiv.org/abs/2104.12225);
 official code [locuslab/DC3](https://github.com/locuslab/DC3), Apache-2.0)
-applied to the two applications of this repository:
+applied to the applications of this repository:
 
 | folder | problem | source of truth |
 |---|---|---|
 | [`entr_max/`](entr_max/README.md) | maximum-entropy cone program | `problems/entr_max` |
 | [`power_grid/`](power_grid/README.md) | economic MPC of a PV + BESS microgrid | `problems/power_grid` |
+| [`qp/`](qp/README.md) | fixed-matrix quadratic program, shared Julia test inputs | `problems/qp` |
 
 The Julia drivers in `experiments/dc3/` `include`
 the shared problem files so that the repository's own solvers

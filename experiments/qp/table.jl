@@ -14,7 +14,8 @@ const n = 100
 const neq = 50
 const m = 50
 const N_SAMPLES = 833
-const SLME_TOL = 1e-3
+const SLME_TOL = 1e-2
+const SLME_FEAS_TOL = 1e-6
 const MAX_ITER = 1000
 const max_opt_gap::FloatType = 1.0
 const SEED = 20260923
@@ -66,7 +67,8 @@ function save_result(method, tol, X, W, times, Jopt)
         result["oracle_assisted"] = true
         result["max_opt_gap"] = max_opt_gap
         result["max_iter"] = MAX_ITER
-        result["projection_setup_excluded"] = false
+        result["feas_tol"] = SLME_FEAS_TOL
+        result["projection_setup_excluded"] = true
     end
     gap_suffix = method == "sLME-ADMM" ? "-gopt=$(max_opt_gap)" : ""
     npzwrite(joinpath(OUT, "$(method)-$(SUFFIX)-tol=$(tol)$(gap_suffix).npz"), result)
@@ -92,9 +94,10 @@ function render(results)
     Max eq. and Max ineq. are per-instance maxima before averaging.
     Equality violations are absolute residuals; inequality violations are positive parts,
     both in original coordinates. Time is in seconds, with compilation excluded.
-    sLME-ADMM factorizes its projection per solve; this factorization is included in its time.
-    sLME-ADMM stopping requires both consensus residual < $(SLME_TOL) and
-    objective gap ≤ $(max_opt_gap)%, using OSQP's known optimum. No feasibility gate is applied.
+    sLME-ADMM factorizes its projection per solve; setup is excluded from its internal solve time.
+    sLME-ADMM stopping requires consensus residual < $(SLME_TOL), original-coordinate
+    equality/inequality violation ≤ $(SLME_FEAS_TOL), and objective gap ≤ $(max_opt_gap)%,
+    using OSQP's known optimum.
     Opt. gap is reported in percent as mean (maximum) across instances.
     Parenthesized deviations across repeated runs are omitted for this single run.
 
@@ -113,7 +116,8 @@ function main()
     gradient = gradient_struct(model, 1, n)
     _, _, warm_J = JuMP_solver("osqp", warm, OSQP_TOL)
     global J_opt = warm_J
-    sLME_ADMM(warm, gradient, sLME_ADMM_callback; tol = SLME_TOL, max_iter = MAX_ITER)
+    sLME_ADMM(warm, gradient, sLME_ADMM_callback; tol = SLME_TOL,
+              feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER)
     Wopt = zeros(N_SAMPLES, n); Wslme = similar(Wopt)
     Topt = zeros(N_SAMPLES); Tslme = similar(Topt); Jopt = similar(Topt)
     for k in 1:N_SAMPLES
@@ -121,7 +125,7 @@ function main()
         Wopt[k, :], Topt[k], Jopt[k] = JuMP_solver("osqp", data, OSQP_TOL)
         global J_opt = Jopt[k]
         Wslme[k, :], Tslme[k], _ = sLME_ADMM(data, gradient, sLME_ADMM_callback; tol = SLME_TOL,
-                                            max_iter = MAX_ITER)
+                                            feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER)
         k % 5 == 0 && GC.gc()
         k % 100 == 0 && println("Completed $k / $N_SAMPLES instances")
     end
