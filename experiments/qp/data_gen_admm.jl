@@ -15,7 +15,7 @@ const REPO         = abspath(joinpath(@__DIR__, "..", ".."))
 const OUT          = joinpath(REPO, "data", "qp", "training")
 const SIZES        = [(100, 50)] # (n, inequality count); 50 equalities in the fixed family
 const SHARES       = length(ARGS) >= 1 ? parse.(Int, split(ARGS[1], ",")) : [1]
-const TAG          = allequal(SHARES) ? "admm20" : "admm20-" * join(SHARES)
+const TAG          = allequal(SHARES) ? "" : "-" * join(SHARES)
 const SEED         = 1
 const N_TRAIN      = 8000
 const N_TEST       = 2000
@@ -120,7 +120,7 @@ function collect_split(split, seed, total)
         @printf("%-5s instance %3d (n=%4d, m=%3d): ADMM %4d it., kept first %3d, %6d distinct q\n",
                 split, k, n, m, K, K_keep, length(pool))
     end
-    path = joinpath(OUT, "qp-$(TAG)-rho=$(RHO)-$(split).npz")
+    path = joinpath(OUT, "qp$(TAG)-rho=$(RHO)-$(split).npz")
     npzwrite(path, merge(Dict("input" => reduce(hcat, X), "grad" => reduce(hcat, G), "enve" => E, "rho" => RHO,
                               "seed" => seed, "first_frac" => FIRST_FRAC,
                               "Q" => qp_data["Q"], "p" => qp_data["p"], "A" => qp_data["A"],

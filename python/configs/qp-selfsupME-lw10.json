@@ -1,0 +1,31 @@
+{
+  "train_data": "data/qp/training/qp-rho=1.0-train.npz",
+  "test_data": "data/qp/training/qp-rho=1.0-test.npz",
+  "output": "models/qp/qp-selfsupME-lw10-rho=1-128x128.npz",
+  "_note": "entr_max-selfsupME-lw10 procedure on QP: loss = mean T(p) + 10 * mean (ICNN(q) - ME label)^2, p = q - grad ICNN(q)/rho, T(p) = f(p) + rho/2 |p - q|^2, f(x) = 1/2 x'Qx + p'x; no gradient labels; data from the whole exact split-ADMM run (FIRST_FRAC = 1)",
+  "weight_act": "softplus",
+  "keep_best": true,
+  "export_act": "softplus",
+  "lower_bound": false,
+  "train": {
+    "widths": [
+      128,
+      128
+    ],
+    "lr": 0.005,
+    "l2_reg": 0,
+    "batch_size": 256,
+    "epochs": 8000,
+    "seed": 0,
+    "label_weight": 10.0,
+    "lr_decay": {
+      "transition_steps": 200,
+      "decay_rate": 0.95,
+      "unit": "epoch"
+    }
+  },
+  "self_supervised": {
+    "objective": "qp",
+    "data": "data/qp/training/qp-rho=1.0-train.npz"
+  }
+}

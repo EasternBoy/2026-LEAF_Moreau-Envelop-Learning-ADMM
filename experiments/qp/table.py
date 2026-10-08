@@ -29,7 +29,7 @@ from DC3.qp import data as D  # noqa: E402
 from DC3.qp.experiment import SPEC  # noqa: E402
 
 OUT = os.path.join(REPO, "results", "qp", "table")
-SUFFIX = "n=100-neq=50-m=50-samples=833"
+SUFFIX = "n=100-neq=50-m=50-samples=1000"
 OSQP_FILE = f"OSQP-{SUFFIX}-tol=1.0e-8.npz"
 SLME_FILE = f"sLME-ADMM-{SUFFIX}-tol=0.001-gopt=1.0.npz"
 DC3_FILE = os.path.join(OUT, f"DC3-{SUFFIX}.npz")

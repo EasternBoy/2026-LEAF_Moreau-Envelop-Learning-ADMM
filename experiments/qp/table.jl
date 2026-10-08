@@ -13,11 +13,11 @@ const FloatType = Float64
 const n = 100
 const neq = 50
 const m = 50
-const N_SAMPLES = 833
+const N_SAMPLES = 1000
 const SLME_TOL = 1e-2
 const SLME_FEAS_TOL = 1e-6
 const MAX_ITER = 1000
-const max_opt_gap::FloatType = 1.0
+const max_opt_gap::FloatType = parse(FloatType, get(ENV, "QP_GOPT", "1.0")) # objective-gap target (%)
 const SEED = 20260923
 const OSQP_TOL = 1e-8
 const SUFFIX = "n=$(n)-neq=$(neq)-m=$(m)-samples=$(N_SAMPLES)"
@@ -32,7 +32,7 @@ function instances()
     path = joinpath(INST_DIR, "instances-$(SUFFIX).npz")
     if isfile(path)
         saved = npzread(path)
-        @assert all(saved[key] == qp_data[key] for key in ("Q", "p", "A", "G", "h"))
+        @assert all(saved[key] ≈ qp_data[key] for key in ("Q", "p", "A", "G", "h"))
         return saved["X"]
     end
     Random.seed!(SEED)

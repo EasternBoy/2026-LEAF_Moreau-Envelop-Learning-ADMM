@@ -16,6 +16,7 @@ import numpy as np
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(REPO, "results", "entr_max", "table")
+FIGURES_OUT = os.path.join(REPO, "results", "entr_max", "figures")
 SIZES = [(100, 10), (1000, 10), (1000, 100)]
 GNAME = "0.1"
 FEAS_TOL = 1e-4
@@ -60,15 +61,17 @@ def figure(k, ylabel, refs, fname):
         ax.set_title(f"$n = {n},\\ m = {m}$", fontsize=2 * BASE_SIZE)
         ax.tick_params(labelsize=TICK_SIZE)
     axes[0].set_ylabel(ylabel, fontsize=YLABEL_SIZE)
-    fig.savefig(os.path.join(OUT, f"{fname}.pdf"))
-    print(f"saved {os.path.join(OUT, fname)}.pdf")
+    os.makedirs(FIGURES_OUT, exist_ok=True)
+    fig.savefig(os.path.join(FIGURES_OUT, f"{fname}.pdf"))
+    print(f"saved {os.path.join(FIGURES_OUT, fname)}.pdf")
 
 
 def main():
-    plt.rcParams.update({"text.usetex": True, "font.family": "serif", "font.size": BASE_SIZE, "axes.spines.top": False, "axes.spines.right": False})
-    figure(0, r"Optimality gap (\%)", [(float(GNAME), rf"$g_{{\mathrm{{opt}}}} = {GNAME}\%$", "--")],
+    plt.rcParams.update({"text.usetex": True, "font.family": "serif", "font.size": BASE_SIZE, "axes.spines.top": False, "axes.spines.right": False,
+                         "text.latex.preamble": r"\usepackage{amsmath}\usepackage{bm}"})
+    figure(0, r"Optimality gap (\%)", [(float(GNAME), rf"$\bm{{g_{{\mathrm{{\bf opt}}}} = {GNAME}\%}}$", "--")],
            "entr_max_gap_boxplot")
-    figure(1, "Constraint violation", [(FEAS_TOL, r"tolerance $10^{-4}$", "--")], "entr_max_viol_boxplot")
+    figure(1, "Constraint violation", [(FEAS_TOL, r"$\bm{c_v = 10^{-4}}$", "--")], "entr_max_viol_boxplot")
 
 
 if __name__ == "__main__":

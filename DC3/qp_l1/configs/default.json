@@ -1,0 +1,53 @@
+{
+  "_comment": "QP + L1 (dense Q, lambda = 0.25) on y directly, no slack variables; DC3/qp settings with 1000 epochs. corr_lr is tuned on the validation split (DC3.tune); shared Julia test instances.",
+  "problem": {},
+  "data": {
+    "seed": 0,
+    "n_train": 8000,
+    "n_valid": 1000,
+    "n_test": 1000,
+    "test_instances": "results/qp_l1/table/instances.npz"
+  },
+  "partition": {
+    "strategy": "random",
+    "strict": true,
+    "cond_warn": 10000000000.0
+  },
+  "reference": {
+    "solver": "CLARABEL",
+    "tol": 1e-09
+  },
+  "dc3": {
+    "hidden_size": 512,
+    "n_hidden": 2,
+    "dropout": 0.0,
+    "batch_norm": true,
+    "input_norm": false,
+    "output_transform": "none",
+    "output_init_target": false,
+    "output_weight_scale": 1.0,
+    "lr": 0.001,
+    "epochs": 1000,
+    "batch_size": 64,
+    "soft_weight": 10.0,
+    "soft_weight_eq_frac": 0.5,
+    "soft_loss_power": 1,
+    "obj_scale": 1.0,
+    "use_compl": true,
+    "use_train_corr": true,
+    "use_test_corr": true,
+    "corr_mode": "partial",
+    "corr_train_steps": 10,
+    "corr_test_max_steps": 500,
+    "corr_eps": 0.0001,
+    "corr_lr": 1e-07,
+    "corr_momentum": 0.5,
+    "corr_preconditioner": "none",
+    "ineq_row_scale": "none",
+    "seed": 0,
+    "device": "cpu",
+    "dtype": "float64",
+    "eval_every": 5,
+    "feas_tol": 0.0001
+  }
+}

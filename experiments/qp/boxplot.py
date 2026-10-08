@@ -13,7 +13,7 @@ import numpy as np
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(REPO, "results", "qp", "table")
-SUFFIX = "n=100-neq=50-m=50-samples=833"
+SUFFIX = "n=100-neq=50-m=50-samples=1000"
 GNAME = "1.0"
 FEAS_TOL = 1e-4
 FLOOR = 1e-17

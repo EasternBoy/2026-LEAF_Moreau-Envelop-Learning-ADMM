@@ -13,6 +13,7 @@
 #               explicit L2 term l2_reg * ||params||² to the loss (mvee)
 
 import json
+import os
 import pickle
 from types import SimpleNamespace
 from typing import List, Dict, Any, Optional
@@ -186,7 +187,11 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         penalty_weight: float = 1.0,
         lr_decay: Optional[Dict[str, Any]] = None,
         val_data: Optional[tuple] = None,
+        save_at: List[int] = (),
+        on_save=None,
     ) -> Dict[str, Any]:
+        """save_at: epochs at which on_save(epoch, params, best_epoch) receives the model kept
+        so far (the best validated one with keep_best), as a run stopped at that epoch returns."""
         bounded = f is not None
         key = jax.random.PRNGKey(seed)
         arrays = [jnp.asarray(a, dtype=jnp.float32) for a in ((X, y, g, f) if bounded else (X, y, g))]
@@ -214,8 +219,11 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
 
         for ep in range(1, epochs + 1):
             it_key, key = jax.random.split(key)
+            train_sums, n_batches = None, 0   # mean training value / gradient MSE over the epoch
             for batch in batch_iterator(arrays, batch_size, it_key):
                 params, opt_state, loss, aux = train_step(params, opt_state, *batch, *extra)
+                train_sums = aux[:2] if train_sums is None else tuple(a + b for a, b in zip(train_sums, aux[:2]))
+                n_batches += 1
 
             if ep % val_every == 0 or ep == 1 or ep == epochs:
                 yp = batched_forward(params, Xv)
@@ -224,6 +232,9 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
                 gm = jnp.mean(jnp.sum((gp - gv) ** 2, axis=1))
                 val_obj = vm + grad_weight * gm
                 msg = f"Epoch {ep:4d} | val MSE: {vm:.4e} | grad MSE: {gm:.4e}"
+                if val_data is not None:
+                    tv, tg = (float(t) / n_batches for t in train_sums)
+                    msg += f" | train MSE: {tv:.4e} | train grad MSE: {tg:.4e}"
                 if bounded:
                     pm = jnp.mean(jax.nn.relu(yp - val_arrays[3]))
                     val_obj = val_obj + penalty_weight * pm
@@ -231,8 +242,12 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
                 if keep_best and val_obj < best_val:
                     best_val, best_ep = val_obj, ep
                     best_params = jax.tree_util.tree_map(lambda x: x.copy(), params)
-                if ep % max(1, epochs // 10) == 0 or ep == 1:
-                    print(msg)
+                if val_data is not None or ep % max(1, epochs // 10) == 0 or ep == 1:
+                    print(msg)   # every validation with val_data, else every epochs/10
+
+            if ep in save_at and ep != epochs and on_save is not None:
+                on_save(ep, jax.tree_util.tree_map(lambda x: x.copy(), best_params if keep_best else params),
+                        best_ep if keep_best else ep)
 
         if keep_best:
             print(f"best validation objective {float(best_val):.4e} at epoch {best_ep}")
@@ -317,7 +332,17 @@ def entr_max_objective(S0: float, eps: float = 1e-9):
     return f
 
 
-OBJECTIVES = {"entr_max": entr_max_objective}
+def qp_objective(data: str):
+    """1/2 x'Qx + p'x with the fixed diagonal Q and p of the QP family (problems/qp/problem.jl),
+    read from a training data file (path relative to the repository root)."""
+    d = np.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", data))
+    q, p = jnp.asarray(np.diag(d["Q"])), jnp.asarray(d["p"])
+    def f(x):
+        return jnp.sum(0.5 * q * x ** 2 + p * x, axis=1)
+    return f
+
+
+OBJECTIVES = {"entr_max": entr_max_objective, "qp": qp_objective}
 
 
 # -----------------------------

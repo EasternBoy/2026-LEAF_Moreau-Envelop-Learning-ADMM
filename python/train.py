@@ -63,6 +63,17 @@ def main():
             train_args["f"] = data_train["org_f"]
         if cfg.get("validate_on_test", False):   # select the best epoch on the test data
             train_args["val_data"] = (Xva, yva, gva)
+        if train_args.get("save_at"):   # <output>-<epoch>ep.npz at each save_at epoch and at the end
+            base = output[:-len(".npz")] if output.endswith(".npz") else output
+            output = f"{base}-{train_args['epochs']}ep.npz"
+
+            def on_save(ep, snapshot, best_ep):
+                path = f"{base}-{ep}ep.npz"
+                print(f"epoch {ep}: model from epoch {best_ep}")
+                report_test(icnn, snapshot, Xva, yva, gva)
+                save_model(snapshot, data_train["rho"].item(), path, export_act=WEIGHT_ACTS[cfg["export_act"]])
+                print(f"saved {path}")
+            train_args["on_save"] = on_save
         params = icnn.train_icnn(Xtr, ytr, gtr, n_in=n, **train_args)
 
     report_test(icnn, params, Xva, yva, gva)

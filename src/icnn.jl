@@ -126,8 +126,7 @@ mutable struct gradient_struct{L, K}
     init_grad_x::Matrix{FloatType}
     init_dL_dz::Matrix{FloatType}
     grad_x_buf::Matrix{FloatType}
-    dL_curr::Matrix{FloatType}
-    dL_next::Matrix{FloatType}
+    dL_store::NTuple{L, Matrix{FloatType}}  # ∂f/∂z per layer; widths may differ
     kernel::K                        # mul_add! or mmul_add_matrix!
 end
 
@@ -142,11 +141,10 @@ function gradient_struct(m::ICNN, nbatch::Int, dim::Int; kernel = mul_add!)
     init_grad_x = repeat(m.a, 1, nbatch)
     init_dL_dz  = repeat(m.v, 1, nbatch)
     grad_x_buf  = zeros(FloatType, dim, nbatch)
-    dL_curr     = zeros(FloatType, size(m.v, 1), nbatch)
-    dL_next     = zeros(FloatType, size(m.v, 1), nbatch)
+    dL_store    = ntuple(i -> zeros(FloatType, layer_rows[i], nbatch), L)
 
     return gradient_struct(lenlay, m, s_store, σ_store, z_store, init_grad_x, init_dL_dz,
-                           grad_x_buf, dL_curr, dL_next, kernel)
+                           grad_x_buf, dL_store, kernel)
 end
 
 "∇ICNN at `x`: a (dim, nbatch) matrix, or a vector holding one (entr_max: dim = 1, mpc: nbatch = 1)."
@@ -168,20 +166,19 @@ function (obj::gradient_struct)(x::AbstractVecOrMat{FloatType})
         activation_sigma!(obj.z_store[i+1], obj.σ_store[i+1], s_next)
     end
 
-    copyto!(obj.dL_curr,    obj.init_dL_dz)
+    copyto!(obj.dL_store[end], obj.init_dL_dz)
     copyto!(obj.grad_x_buf, obj.init_grad_x)
 
     for i in obj.lenlay:-1:1
         layer = obj.m.layers[i]
         dL_ds = obj.σ_store[i+1]
-        hadamard!(dL_ds, obj.dL_curr)
+        hadamard!(dL_ds, obj.dL_store[i+1])
         muladd!(obj.grad_x_buf, layer.U', dL_ds)
-        mul!(obj.dL_next, layer.W', dL_ds)
-        obj.dL_curr, obj.dL_next = obj.dL_next, obj.dL_curr
+        mul!(obj.dL_store[i], layer.W', dL_ds)
     end
 
     dL_ds_first = obj.σ_store[1]
-    hadamard!(dL_ds_first, obj.dL_curr)
+    hadamard!(dL_ds_first, obj.dL_store[1])
     muladd!(obj.grad_x_buf, obj.m.U0', dL_ds_first)
 
     return x isa AbstractVector ? vec(obj.grad_x_buf) : obj.grad_x_buf
