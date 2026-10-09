@@ -1,4 +1,5 @@
-# QP + L1 benchmark: OSQP (slack form), sLME-ADMM with the ICNN + Huber model, DC3 + correction.
+# QP + L1 benchmark: OSQP (slack form), standard ADMM, split ADMM (exact FISTA prox), sLME-ADMM with the
+# ICNN + Huber model, DC3 + correction.
 #   julia --project=. experiments/qp_l1/table.jl            # run missing Julia results, then render
 #   julia --project=. experiments/qp_l1/table.jl --force    # rerun the Julia solvers
 #   julia --project=. experiments/qp_l1/table.jl --render   # render saved results only
@@ -32,9 +33,12 @@ const MODELS = ["5000ep" => "models/qp_l1/qp_l1-lambda=1-rho=10-128x128-huber100
 include(joinpath(REPO, "problems", "qp_l1", "problem.jl"))
 include(joinpath(REPO, "problems", "qp_l1", "setup.jl"))
 include(joinpath(REPO, "problems", "qp_l1", "jump_solver.jl"))
+include(joinpath(REPO, "problems", "qp_l1", "admm.jl"))
 
 const MATRICES = ("Q", "p", "A", "G", "h")
 slme_file(tag, gap) = "sLME-ADMM-$(tag)-gopt=$(gap).npz"
+split_file(gap) = "split-ADMM-gopt=$(gap).npz"
+admm_file(gap) = "ADMM-gopt=$(gap).npz"
 
 function instances()
     path = joinpath(OUT, "instances.npz")
@@ -79,6 +83,44 @@ function run_julia(X)
              Dict("W" => Wopt, "J_opt" => Jopt, "time_ms" => 1e3 .* Topt, "tol" => OSQP_TOL,
                   "max_iter" => 100_000,
                   "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA))
+    # Standard ADMM: prox of f (FISTA), projection onto the feasible set (OSQP)
+    proj = feasible_projection(instance(X, 1))
+    for gap in GAPS
+        GAP_TARGET[] = gap
+        global J_opt = Jopt[1]
+        ADMM_standard(instance(X, 1), proj, sLME_ADMM_callback; tol = SLME_TOL, feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER) # compile
+        W = zeros(N_SAMPLES, n); T = zeros(N_SAMPLES)
+        for k in 1:N_SAMPLES
+            global J_opt = Jopt[k]
+            W[k, :], T[k], _ = ADMM_standard(instance(X, k), proj, sLME_ADMM_callback; tol = SLME_TOL,
+                                             feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER)
+            k % 5 == 0 && GC.gc()
+            k % 200 == 0 && println("standard ADMM: $k / $N_SAMPLES")
+        end
+        println("standard ADMM, g_opt ≤ $gap%: done")
+        npzwrite(joinpath(OUT, admm_file(gap)),
+                 Dict("W" => W, "time_ms" => 1e3 .* T, "max_opt_gap" => gap, "tol" => SLME_TOL, "feas_tol" => SLME_FEAS_TOL,
+                      "max_iter" => MAX_ITER, "oracle_assisted" => true,   # prox: FISTA; projection: OSQP, tol 1e-10
+                      "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA, "rho" => QP_L1_RHO))
+    end
+    # Split ADMM: the sMEL-ADMM splitting and stopping test with the exact (FISTA) prox
+    for gap in GAPS
+        GAP_TARGET[] = gap
+        global J_opt = Jopt[1]
+        ADMM_exact(instance(X, 1), sLME_ADMM_callback; tol = SLME_TOL, feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER) # compile
+        W = zeros(N_SAMPLES, n); T = zeros(N_SAMPLES)
+        for k in 1:N_SAMPLES
+            global J_opt = Jopt[k]
+            W[k, :], T[k], _ = ADMM_exact(instance(X, k), sLME_ADMM_callback; tol = SLME_TOL,
+                                          feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER)
+            k % 5 == 0 && GC.gc()
+        end
+        println("split ADMM, g_opt ≤ $gap%: done")
+        npzwrite(joinpath(OUT, split_file(gap)),
+                 Dict("W" => W, "time_ms" => 1e3 .* T, "max_opt_gap" => gap, "tol" => SLME_TOL, "feas_tol" => SLME_FEAS_TOL,
+                      "max_iter" => MAX_ITER, "oracle_assisted" => true,   # exact prox: FISTA, tol 1e-13
+                      "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA, "rho" => QP_L1_RHO))
+    end
     for (tag, path) in MODELS
         ρ_model, mp = load_model(path)
         ρ_model ≈ qp_data["rho"][] || error("$path was trained for ρ = $ρ_model, the problem uses ρ = $(qp_data["rho"][])")
@@ -112,7 +154,9 @@ function render(X)
     osqp = load("OSQP.npz")
     Jopt = osqp["J_opt"]
     # Per column: the result used for each gap target (sLME-ADMM is rerun per target).
-    columns = Tuple{String, Dict{Float64, Any}}[("OSQP (slack form)", Dict{Float64, Any}(gap => osqp for gap in GAPS))]
+    columns = Tuple{String, Dict{Float64, Any}}[("OSQP (slack form)", Dict{Float64, Any}(gap => osqp for gap in GAPS)),
+                                                ("ADMM", Dict{Float64, Any}(gap => load(admm_file(gap)) for gap in GAPS)),
+                                                ("split ADMM", Dict{Float64, Any}(gap => load(split_file(gap)) for gap in GAPS))]
     for (tag, _) in MODELS
         push!(columns, ("sLME-ADMM $tag", Dict{Float64, Any}(gap => load(slme_file(tag, gap)) for gap in GAPS)))
     end
@@ -152,7 +196,11 @@ function render(X)
     and is the reference optimum. sLME-ADMM works on y directly with the learned Moreau envelope
     (consensus tolerance $SLME_TOL, feasibility tolerance $SLME_FEAS_TOL, at most $MAX_ITER
     iterations) and is rerun for each gap target, using the known optimum; violation, gap and
-    zeros are from the $(first(GAPS))% run. DC3 + correction also works on y directly.
+    zeros are from the $(first(GAPS))% run. Split ADMM uses the sLME-ADMM splitting and stopping
+    test with the exact prox of f (FISTA, tolerance 1e-13) in place of the learned envelope. ADMM is
+    the standard splitting: the exact prox of f, then the projection onto {Ay = x, Gy ≤ h} by OSQP
+    (tolerance 1e-10), stopping at ‖w - z‖∞ < $SLME_TOL with the same feasibility and gap tests.
+    DC3 + correction also works on y directly.
     A timing cell needs every instance within the gap target and violation ≤ $C_V;
     **bold** marks the lowest mean time among those. — means results are missing.
 
@@ -166,7 +214,7 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     X = instances()
-    files = ["OSQP.npz"; [slme_file(tag, gap) for (tag, _) in MODELS for gap in GAPS]]
+    files = ["OSQP.npz"; [admm_file(gap) for gap in GAPS]; [split_file(gap) for gap in GAPS]; [slme_file(tag, gap) for (tag, _) in MODELS for gap in GAPS]]
     "--render" in ARGS || (("--force" in ARGS || !all(f -> isfile(joinpath(OUT, f)), files)) && run_julia(X))
     render(X)
 end
