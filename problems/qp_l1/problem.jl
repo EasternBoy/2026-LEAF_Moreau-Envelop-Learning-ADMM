@@ -9,7 +9,8 @@ using JSON3
 # min ½y'Qy + p'y + λ‖y‖₁  s.t.  Ay = x, Gy ≤ h, in the original decision-variable coordinates.
 var_scale(data) = 1.0
 
-const QP_L1_LAMBDA = 0.25
+const QP_L1_LAMBDA = 1.0
+const QP_L1_RHO    = 10.0   # ADMM / Moreau-envelope ρ: the fewest exact sMEL-ADMM iterations at λ = 1
 
 # p, A, G, h: locuslab/DC3/datasets/simple/make_dataset.py (NumPy seed 17, original draw order),
 # as in problems/qp.  Q is dense: B B'/400 + 0.1 I with B ~ N(0, 1), 100 × 100, NumPy seed 18,
@@ -36,7 +37,7 @@ print(json.dumps(dict(Q=Q.flatten(order='F').tolist(), p=p.tolist(),
     return Dict("Q" => (Q + Q')/2, "p" => Float64.(data["p"]),
                 "A" => reshape(Float64.(data["A"]), 50, 100),
                 "G" => reshape(Float64.(data["G"]), 50, 100),
-                "h" => Float64.(data["h"]), "lambda" => fill(QP_L1_LAMBDA), "rho" => fill(1.0))
+                "h" => Float64.(data["h"]), "lambda" => fill(QP_L1_LAMBDA), "rho" => fill(QP_L1_RHO))
 end
 
 # The matrices are fixed across instances; only x varies.

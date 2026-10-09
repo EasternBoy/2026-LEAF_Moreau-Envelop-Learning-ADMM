@@ -27,7 +27,7 @@ def fixed_data() -> dict:
     return dict(Q=(Q + Q.T) / 2, p=p, A=A, G=G, h=h)
 
 
-LAMBDA = 0.25
+LAMBDA = 1.0
 
 
 def to_params(X, device, dtype) -> QPParams:

@@ -13,10 +13,9 @@ zeros are from the 1.0% run. DC3 + correction also works on y directly.
 A timing cell needs every instance within the gap target and violation ≤ 0.0001;
 **bold** marks the lowest mean time among those. — means results are missing.
 
-|  | OSQP (slack form) mean (max) | sLME-ADMM 5000ep mean (max) | sLME-ADMM 10000ep mean (max) | DC3 + correction mean (max) |
-|---|---|---|---|---|
-| Solving time (g_opt ≤ 1.0%) | **48.43 (642.56)** | unable to achieve | unable to achieve | unable to achieve |
-| Solving time (g_opt ≤ 11.0%) | **48.43 (642.56)** | unable to achieve | unable to achieve | unable to achieve |
-| Constr. viol. | 9.4e-12 (5.3e-11) | 2.8e-01 (1.7e+01) | 2.8e-01 (1.7e+01) | 1.8e-14 (4.0e-14) |
-| Opt. gap (%) | 0 (0) | 2.76e+05 (1.25e+06) | 2.76e+05 (1.25e+06) | 21.1 (38.4) |
-| Zeros (%) | 48.3 (51.0) | 0.0 (1.0) | 0.0 (1.0) | 0.4 (3.0) |
+|  | OSQP (slack form) mean (max) | sLME-ADMM 5000ep mean (max) | DC3 + correction mean (max) |
+|---|---|---|---|
+| Solving time (g_opt ≤ 1.0%) | 39.68 (464.66) | **4.26 (7.96)** | — |
+| Constr. viol. | 9.7e-12 (5.3e-11) | 1.9e-15 (4.1e-15) | — |
+| Opt. gap (%) | 0 (0) | 0.968 (1) | — |
+| Zeros (%) | 48.3 (51.0) | 4.8 (14.0) | — |

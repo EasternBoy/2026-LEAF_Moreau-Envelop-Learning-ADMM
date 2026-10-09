@@ -9,6 +9,14 @@
 #               train_icnn scores that validation set at every learning-rate transition
 #               (every lr_decay transition_steps, or every epochs/10 without lr_decay); otherwise
 #               the objective is scored on the first 1024 training samples
+#   acts        hidden-layer activations, one per layer (default softplus everywhere): "softplus",
+#               "softplus<β>" = softplus(β t)/β, or "elu".  Layer 1 needs a convex activation, the
+#               later layers convex and nondecreasing; all of these are both.  save_model writes them
+#               to the .npz (act_kind, act_beta), which src/icnn.jl reads.
+#   huber_terms k > 0 adds Σᵢ softplus(c̃ᵢ) H_δᵢ(Bᵢᵀx + dᵢ), δᵢ = softplus(δ̃ᵢ), to the ICNN: learned
+#               Huber terms (H_δ = Moreau envelope of |t|) that give the gradient exact corners, for
+#               an L1 term in the objective.  Still convex.  save_model writes huber_B, huber_d,
+#               huber_c, huber_delta to the .npz, which src/icnn.jl reads.
 #   f           lower-bound targets: adds penalty_weight * mean(relu(f_pred - f)) and an
 #               explicit L2 term l2_reg * ||params||² to the loss (mvee)
 
@@ -35,6 +43,8 @@ def init_icnn_params(
     key: jax.Array,
     n_in: int,
     widths: List[int],
+    init: str = "default",
+    huber_terms: int = 0,
 ) -> Dict[str, Any]:
     """
     ICNN parameters:
@@ -48,7 +58,14 @@ def init_icnn_params(
         - act is convex & nondecreasing; we use softplus for smooth gradients.
         - act_p(Wk) and act_p(v) ensure elementwise nonnegativity.
         - a^T x + c is linear (convex).
+      init = "default": the raw W and v near 0, so act_p(W), act_p(v) ≈ softplus(0) = 0.69 and the
+        output grows like width² (about 2e4 for 256x256).  init = "fan_in": raw values with
+        softplus(raw) ≈ 1/fan_in (times a lognormal-like spread), so each unit averages its inputs
+        and the output starts at O(1).
     """
+    def nonneg_raw(k, shape, fan_in):   # softplus(raw) ≈ exp(0.5 ξ) / fan_in, ξ ~ N(0, 1)
+        target = jnp.exp(0.5 * jax.random.normal(k, shape)) / fan_in
+        return jnp.log(jnp.expm1(target))
     num_layers = len(widths)
     keys = jax.random.split(key, 3 * num_layers + 3)
 
@@ -63,19 +80,52 @@ def init_icnn_params(
             W.append(jax.numpy.zeros((w, n_in)))
         else:
             # Unconstrained state weight; act_p applied in forward pass
-            W.append(0.05 * jax.random.normal(keys[ki], (w, widths[i - 1]))); ki += 1
+            W.append(nonneg_raw(keys[ki], (w, widths[i - 1]), widths[i - 1]) if init == "fan_in"
+                     else 0.05 * jax.random.normal(keys[ki], (w, widths[i - 1]))); ki += 1
 
         b.append(jnp.zeros((w,)))
 
     # Last-layer z-weights (constrained nonnegative via act_p), linear term, and bias
-    v = 0.05 * jax.random.normal(keys[-3], (widths[-1],))
+    v = (nonneg_raw(keys[-3], (widths[-1],), widths[-1]) if init == "fan_in"
+         else 0.05 * jax.random.normal(keys[-3], (widths[-1],)))
     a = 0.01 * jax.random.normal(keys[-2], (n_in,))
     c = jnp.array(0.0)
 
-    return {"U": U, "W": W, "b": b, "v": v, "a": a, "c": c}
+    params = {"U": U, "W": W, "b": b, "v": v, "a": a, "c": c}
+    if huber_terms > 0:   # B starts near the identity (one term per coordinate), c = δ = 0.1
+        start = jnp.log(jnp.expm1(0.1))
+        params.update(huber_B=jnp.eye(n_in, huber_terms) + 0.01 * jax.random.normal(jax.random.fold_in(key, 99), (n_in, huber_terms)),
+                      huber_d=jnp.zeros(huber_terms), huber_c=jnp.full(huber_terms, start),
+                      huber_delta=jnp.full(huber_terms, start))
+    return params
+
+
+def huber(t, delta):
+    """H_δ(t) = t²/2δ on |t| ≤ δ, |t| - δ/2 outside: the Moreau envelope of |t|."""
+    a = jnp.abs(t)
+    return jnp.where(a <= delta, t * t / (2 * delta), a - delta / 2)
 
 
 WEIGHT_ACTS = {"relu": jax.nn.relu, "softplus": jax.nn.softplus}
+
+# Hidden-layer activations (convex, nondecreasing): name -> (kind code for src/icnn.jl, β).
+ACT_KINDS = {"softplus": 0, "elu": 1}
+
+
+def parse_act(name: str):
+    """'softplus' (β = 1), 'softplus<β>' (softplus(β t)/β) or 'elu' -> (kind, β)."""
+    if name == "elu":
+        return "elu", 1.0
+    if name.startswith("softplus"):
+        return "softplus", float(name[len("softplus"):] or 1.0)
+    raise ValueError(f"unknown activation {name!r}")
+
+
+def act_fn(name: str):
+    kind, beta = parse_act(name)
+    if kind == "elu":
+        return jax.nn.elu
+    return jax.nn.softplus if beta == 1.0 else (lambda t: jax.nn.softplus(beta * t) / beta)
 
 
 def learning_rate(lr: float, lr_decay: Optional[Dict[str, Any]] = None, steps_per_epoch: int = 1):
@@ -90,9 +140,11 @@ def learning_rate(lr: float, lr_decay: Optional[Dict[str, Any]] = None, steps_pe
                                    staircase=lr_decay.get("staircase", False))
 
 
-def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespace:
-    """The jitted ICNN functions for one choice of weight projection (see the file header)."""
+def make_icnn(weight_act: str = "relu", keep_best: bool = True, acts: Optional[List[str]] = None) -> SimpleNamespace:
+    """The jitted ICNN functions for one choice of weight projection and hidden-layer
+    activations (see the file header; acts = None: softplus in every layer)."""
     act_p = WEIGHT_ACTS[weight_act]
+    layer_act = lambda i: jax.nn.softplus if acts is None else act_fn(acts[i])
 
     # -----------------------------
     # Forward pass
@@ -105,15 +157,20 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         Returns: scalar (0-d array)
         """
         U, W, b = params["U"], params["W"], params["b"]
-        act = jax.nn.softplus  # convex & nondecreasing
+        if acts is not None and len(acts) != len(U):
+            raise ValueError(f"{len(acts)} activations for {len(U)} layers")
 
-        z = act(jnp.dot(U[0], x) + b[0])  # first layer (no state W)
+        z = layer_act(0)(jnp.dot(U[0], x) + b[0])  # first layer (no state W)
         for i in range(1, len(U)):
             # state contribution is constrained nonnegative via act_p(Wi)
-            z = act(jnp.dot(act_p(W[i]), z) + jnp.dot(U[i], x) + b[i])
+            z = layer_act(i)(jnp.dot(act_p(W[i]), z) + jnp.dot(U[i], x) + b[i])
 
         v_nonneg = act_p(params["v"])  # nonnegative combination of convex features
-        return jnp.dot(v_nonneg, z) + jnp.dot(params["a"], x) + params["c"]
+        f = jnp.dot(v_nonneg, z) + jnp.dot(params["a"], x) + params["c"]
+        if "huber_B" in params:   # + Σ softplus(c̃) H_softplus(δ̃)(Bᵀx + d)
+            t = jnp.dot(params["huber_B"].T, x) + params["huber_d"]
+            f = f + jnp.dot(jax.nn.softplus(params["huber_c"]), huber(t, jax.nn.softplus(params["huber_delta"])))
+        return f
 
     batched_forward = jax.vmap(icnn_forward, in_axes=(None, 0))
 
@@ -171,6 +228,31 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
                 return optax.apply_updates(params, updates), opt_state, loss, aux
         return train_step
 
+    def make_train_epoch(train_step, batch_size: int):
+        """One epoch as a single compiled call: the batches of batch_iterator's shuffle (full
+        batches by lax.scan, then the remainder) instead of a Python loop of small GPU calls.
+        Returns params, opt_state and the summed (value MSE, gradient MSE) over the batches."""
+        @jax.jit
+        def train_epoch(params, opt_state, key, arrays, extra):
+            N = arrays[0].shape[0]
+            perm = jax.random.permutation(key, N)
+            nb = N // batch_size
+
+            def body(carry, j):
+                p, s = carry
+                p, s, _, aux = train_step(p, s, *(a[j] for a in arrays), *extra)
+                return (p, s), jnp.stack(aux[:2])
+
+            (params, opt_state), auxs = jax.lax.scan(
+                body, (params, opt_state), perm[:nb * batch_size].reshape(nb, batch_size))
+            sums = auxs.sum(axis=0)
+            if N % batch_size:
+                rest = perm[nb * batch_size:]
+                params, opt_state, _, aux = train_step(params, opt_state, *(a[rest] for a in arrays), *extra)
+                sums = sums + jnp.stack(aux[:2])
+            return params, opt_state, sums
+        return train_epoch
+
     def train_icnn(
         X: np.ndarray,
         y: np.ndarray,
@@ -187,6 +269,8 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         penalty_weight: float = 1.0,
         lr_decay: Optional[Dict[str, Any]] = None,
         val_data: Optional[tuple] = None,
+        init: str = "default",
+        huber_terms: int = 0,
         save_at: List[int] = (),
         on_save=None,
     ) -> Dict[str, Any]:
@@ -208,22 +292,20 @@ def make_icnn(weight_act: str = "relu", keep_best: bool = True) -> SimpleNamespa
         Xj, yj, gj = arrays[:3]
         Xv, yv, gv = val_arrays[:3]
 
-        params = init_icnn_params(key, n_in=n_in, widths=widths)
+        params = init_icnn_params(key, n_in=n_in, widths=widths, init=init, huber_terms=huber_terms)
         best_params = params
         best_val, best_ep = jnp.inf, 0
 
         optimizer = optax.adamw(learning_rate=learning_rate(lr, lr_decay, -(-X.shape[0] // batch_size)), weight_decay=l2_reg)
         opt_state = optimizer.init(params)
-        train_step = make_train_step(optimizer, bounded)
+        train_epoch = make_train_epoch(make_train_step(optimizer, bounded), batch_size)
         extra = (grad_weight, penalty_weight, l2_reg) if bounded else (grad_weight,)
+        n_batches = -(-X.shape[0] // batch_size)
 
         for ep in range(1, epochs + 1):
             it_key, key = jax.random.split(key)
-            train_sums, n_batches = None, 0   # mean training value / gradient MSE over the epoch
-            for batch in batch_iterator(arrays, batch_size, it_key):
-                params, opt_state, loss, aux = train_step(params, opt_state, *batch, *extra)
-                train_sums = aux[:2] if train_sums is None else tuple(a + b for a, b in zip(train_sums, aux[:2]))
-                n_batches += 1
+            # train_sums: summed training value / gradient MSE over the epoch's batches
+            params, opt_state, train_sums = train_epoch(params, opt_state, it_key, tuple(arrays), extra)
 
             if ep % val_every == 0 or ep == 1 or ep == epochs:
                 yp = batched_forward(params, Xv)
@@ -362,30 +444,46 @@ def batch_iterator(arrays, batch_size: int, shuffle_key: jax.Array):
 # -----------------------------
 # Evaluation and export (used by train.py)
 # -----------------------------
-def report_test(icnn: SimpleNamespace, params, Xva, yva, gva) -> None:
-    y_pred = icnn.batched_forward(params,    jnp.asarray(Xva))
-    g_pred = icnn.batched_grad_wrt_x(params, jnp.asarray(Xva))
+def report_test(icnn: SimpleNamespace, params, Xva, yva, gva, scale: float = 1.0) -> None:
+    """Test errors of scale · ICNN against the labels (scale = ρ for a model trained on ME/ρ)."""
+    y_pred = scale * icnn.batched_forward(params,    jnp.asarray(Xva))
+    g_pred = scale * icnn.batched_grad_wrt_x(params, jnp.asarray(Xva))
     val_mse = jnp.mean((y_pred - jnp.asarray(yva)) ** 2)
     grad_mse = jnp.mean(jnp.sum((g_pred - jnp.asarray(gva)) ** 2, axis=1))
     grad_max = jnp.sqrt(jnp.max(jnp.sum((g_pred - jnp.asarray(gva)) ** 2, axis=1)))
     print(f"[TEST] value MSE: {val_mse:.4e} | grad MSE: {grad_mse:.4e} | grad MAX: {grad_max:.4e}")
 
 
-def save_model(params, rho: float, path_to_save: str, export_act) -> None:
+def save_model(params, rho: float, path_to_save: str, export_act, out_scale: float = 1.0,
+               acts: Optional[List[str]] = None) -> None:
     """Writes <path>.pkl and <path>.json (read by load_model in src/icnn.jl) with the
     projection export_act applied to v and the state weights W[1:], as the Julia ICNN
     uses the weights as they are.  A path ending in .npz writes that one file instead:
-    U1.., W1.., b1.. (one per layer), v, a, c and rho, in float64."""
+    U1.., W1.., b1.. (one per layer), v, a, c and rho, in float64.  out_scale multiplies the
+    output layer (v, a, c), so the saved model is out_scale · ICNN (still convex for out_scale > 0)."""
+    os.makedirs(os.path.dirname(os.path.abspath(path_to_save)), exist_ok=True)
     params["rho"] = rho
-    params["v"]   = export_act(params["v"])
+    params["v"]   = out_scale * export_act(params["v"])
+    params["a"]   = out_scale * params["a"]
+    params["c"]   = out_scale * params["c"]
     for i in range(1, len(params["W"])):
         params["W"][i] = export_act(params["W"][i])
     if path_to_save.endswith(".npz"):
         arrays = {"v": params["v"], "a": params["a"], "c": params["c"], "rho": rho}
+        if "huber_B" in params:   # c scaled with the output; c and δ with the softplus applied
+            arrays.update(huber_B=params["huber_B"], huber_d=params["huber_d"],
+                          huber_c=out_scale * jax.nn.softplus(params["huber_c"]),
+                          huber_delta=jax.nn.softplus(params["huber_delta"]))
+        if acts is not None:   # per-layer activations for src/icnn.jl (absent: softplus everywhere)
+            parsed = [parse_act(a) for a in acts]
+            arrays["act_kind"] = np.array([ACT_KINDS[k] for k, _ in parsed])
+            arrays["act_beta"] = np.array([beta for _, beta in parsed])
         for key in ("U", "W", "b"):
             arrays.update({f"{key}{i + 1}": x for i, x in enumerate(params[key])})
         np.savez(path_to_save, **{k: np.asarray(x, dtype=np.float64) for k, x in arrays.items()})
         return
+    if acts is not None or "huber_B" in params:
+        raise ValueError("non-default activations and Huber terms are saved only to .npz (src/icnn.jl reads them there)")
     with open(path_to_save + ".pkl", "wb") as f:
         pickle.dump(params, f)
     with open(path_to_save + ".json", 'w') as f:

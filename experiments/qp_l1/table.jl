@@ -1,4 +1,4 @@
-# QP + L1 benchmark: OSQP (slack form), sLME-ADMM with two ICNN checkpoints, DC3 + correction.
+# QP + L1 benchmark: OSQP (slack form), sLME-ADMM with the ICNN + Huber model, DC3 + correction.
 #   julia --project=. experiments/qp_l1/table.jl            # run missing Julia results, then render
 #   julia --project=. experiments/qp_l1/table.jl --force    # rerun the Julia solvers
 #   julia --project=. experiments/qp_l1/table.jl --render   # render saved results only
@@ -17,16 +17,17 @@ const n = 100
 const neq = 50
 const m = 50
 const N_SAMPLES = 1000
-const SEED = 20260923            # the QP benchmark seed: the same x as results/qp/table
+const SEED = 20260923            # the QP benchmark seed (same x as the former qp table)
 const OSQP_TOL = 1e-8
 const SLME_TOL = 1e-2
 const SLME_FEAS_TOL = 1e-6
 const MAX_ITER = 1000
-const GAPS = (1.0, 11.0)         # objective-gap targets (%)
+const GAPS = (1.0,)              # objective-gap targets (%)
 const C_V = 1e-4                 # feasibility threshold for a timing cell
 const ZERO_TOL = 1e-4            # |y_i| ≤ ZERO_TOL counts as zero
-const MODELS = ["5000ep" => "models/qp_l1/qp_l1-rho=1-128x128-5000ep.npz",
-                "10000ep" => "models/qp_l1/qp_l1-rho=1-128x128-10000ep.npz"]
+# ICNN (ELU, softplus(5t)/5) + 100 learned Huber terms, 5000 epochs on ME/ρ (λ = 1, ρ = 10):
+# python python/train.py qp_l1 (python/configs/qp_l1.json)
+const MODELS = ["5000ep" => "models/qp_l1/qp_l1-lambda=1-rho=10-128x128-huber100-5000ep.npz"]
 
 include(joinpath(REPO, "problems", "qp_l1", "problem.jl"))
 include(joinpath(REPO, "problems", "qp_l1", "setup.jl"))
@@ -79,7 +80,8 @@ function run_julia(X)
                   "max_iter" => 100_000,
                   "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA))
     for (tag, path) in MODELS
-        _, mp = load_model(path)
+        ρ_model, mp = load_model(path)
+        ρ_model ≈ qp_data["rho"][] || error("$path was trained for ρ = $ρ_model, the problem uses ρ = $(qp_data["rho"][])")
         gradient = gradient_struct(ICNN(mp), 1, n)
         for gap in GAPS
             GAP_TARGET[] = gap
@@ -95,7 +97,7 @@ function run_julia(X)
             end
             println("sLME-ADMM $tag, g_opt ≤ $gap%: done")
             npzwrite(joinpath(OUT, slme_file(tag, gap)),
-                     Dict("W" => W, "time_ms" => 1e3 .* T, "model_epochs" => parse(Int, chop(tag, tail = 2)), "max_opt_gap" => gap,
+                     Dict("W" => W, "time_ms" => 1e3 .* T, "model_epochs" => parse(Int, match(r"(\d+)ep$", tag)[1]), "max_opt_gap" => gap,
                           "tol" => SLME_TOL, "feas_tol" => SLME_FEAS_TOL, "max_iter" => MAX_ITER,
                           "oracle_assisted" => true, "projection_setup_excluded" => true,
                           "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA))
@@ -110,12 +112,12 @@ function render(X)
     osqp = load("OSQP.npz")
     Jopt = osqp["J_opt"]
     # Per column: the result used for each gap target (sLME-ADMM is rerun per target).
-    columns = [("OSQP (slack form)", Dict(gap => osqp for gap in GAPS))]
+    columns = Tuple{String, Dict{Float64, Any}}[("OSQP (slack form)", Dict{Float64, Any}(gap => osqp for gap in GAPS))]
     for (tag, _) in MODELS
-        push!(columns, ("sLME-ADMM $tag", Dict(gap => load(slme_file(tag, gap)) for gap in GAPS)))
+        push!(columns, ("sLME-ADMM $tag", Dict{Float64, Any}(gap => load(slme_file(tag, gap)) for gap in GAPS)))
     end
     dc3 = load("DC3.npz")
-    push!(columns, ("DC3 + correction", Dict(gap => dc3 for gap in GAPS)))
+    push!(columns, ("DC3 + correction", Dict{Float64, Any}(gap => dc3 for gap in GAPS)))
     for (_, by_gap) in columns, saved in values(by_gap)
         saved === nothing || haskey(saved, "gap_pct") || merge!(saved, score(X, saved["W"], Jopt))
     end

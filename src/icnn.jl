@@ -17,11 +17,39 @@
     return mat
 end
 
-@inline function activation_sigma!(activ, sigma_buf, preactiv)
+# Hidden-layer activation (convex, nondecreasing), one per layer: kind 0 = softplus(β t)/β
+# (β = 1: softplus), kind 1 = ELU.  Written by python/micnn.py as act_kind / act_beta in the .npz.
+struct Activation
+    kind::Int
+    β::FloatType
+end
+const SOFTPLUS = Activation(0, one(FloatType))
+
+"Value and derivative of the activation at t."
+@inline function act_value_deriv(act::Activation, t)
+    if act.kind == 1   # ELU
+        return t > 0 ? (t, one(t)) : (expm1(t), exp(t))
+    elseif act.β == 1
+        return NNlib.softplus(t), NNlib.σ(t)
+    else
+        return NNlib.softplus(act.β * t) / act.β, NNlib.σ(act.β * t)
+    end
+end
+@inline act_value(act::Activation, t) = first(act_value_deriv(act, t))
+
+# Optional learned Huber terms added to the ICNN: Σᵢ cᵢ H_δᵢ(Bᵢᵀx + dᵢ), cᵢ ≥ 0, δᵢ > 0, with
+# H_δ(t) = t²/2δ on |t| ≤ δ and |t| - δ/2 outside (the Moreau envelope of |t|).  Gradient:
+# B (c .* clip.((Bᵀx + d) ./ δ, -1, 1)).  Read from huber_B, huber_d, huber_c, huber_delta in the .npz.
+struct HuberTerms
+    B::Matrix{FloatType}   # (dim, k)
+    d::Vector{FloatType}
+    c::Vector{FloatType}
+    δ::Vector{FloatType}
+end
+
+@inline function activation_sigma!(activ, sigma_buf, preactiv, act::Activation = SOFTPLUS)
     @inbounds @simd for i in eachindex(activ)
-        val          = preactiv[i]
-        activ[i]     = NNlib.softplus(val)
-        sigma_buf[i] = NNlib.σ(val)
+        activ[i], sigma_buf[i] = act_value_deriv(act, preactiv[i])
     end
     return activ
 end
@@ -62,7 +90,9 @@ function load_model(fname::String)
     return FloatType(data["rho"]), model
 end
 
-"A model saved as .npz by python/train.py: U1.., W1.., b1.. per layer, v, a, c, rho."
+"A model saved as .npz by python/train.py: U1.., W1.., b1.. per layer, v, a, c, rho, and optionally
+the per-layer activations act_kind, act_beta (absent: softplus everywhere), and the
+Huber terms huber_B, huber_d, huber_c, huber_delta (absent: none)."
 function load_model_npz(fname::String)
     data = npzread(fname)
     L    = count(k -> occursin(r"^U\d+$", k), keys(data))
@@ -72,8 +102,15 @@ function load_model_npz(fname::String)
         a = Vector{FloatType}(data["a"]),
         b = [Vector{FloatType}(data["b$i"]) for i in 1:L],
         c = FloatType(data["c"][]),
-        v = Vector{FloatType}(data["v"])
+        v = Vector{FloatType}(data["v"]),
+        acts = haskey(data, "act_kind") ?
+            [Activation(Int(k), FloatType(β)) for (k, β) in zip(data["act_kind"], data["act_beta"])] :
+            fill(SOFTPLUS, L),
+        huber = haskey(data, "huber_B") ?
+            HuberTerms(Matrix{FloatType}(data["huber_B"]), Vector{FloatType}(data["huber_d"]),
+                       Vector{FloatType}(data["huber_c"]), Vector{FloatType}(data["huber_delta"])) : nothing
     )
+    length(model.acts) == L || error("$fname: $(length(model.acts)) activations for $L layers")
     return FloatType(data["rho"][]), model
 end
 
@@ -95,21 +132,28 @@ struct ICNN
     v::Vector{FloatType}
     a::Vector{FloatType}
     c::FloatType
+    acts::Vector{Activation}   # one per layer, the first for U0
+    huber::Union{Nothing, HuberTerms}
 end
+
+# Softplus in every layer (the models without act_kind) and no Huber terms.
+ICNN(U0, b0, layers, v, a, c) = ICNN(U0, b0, layers, v, a, c, fill(SOFTPLUS, length(layers) + 1), nothing)
+ICNN(U0, b0, layers, v, a, c, acts::Vector{Activation}) = ICNN(U0, b0, layers, v, a, c, acts, nothing)
 
 "The ICNN of a model read by `load_model`."
 ICNN(mp::NamedTuple) = ICNN(mp.U[1], mp.b[1], [ICNN_Layer(mp.U[i], mp.W[i], mp.b[i]) for i in 2:length(mp.U)],
-                            mp.v, mp.a, mp.c)
+                            mp.v, mp.a, mp.c, hasproperty(mp, :acts) ? mp.acts : fill(SOFTPLUS, length(mp.U)),
+                            hasproperty(mp, :huber) ? mp.huber : nothing)
 
-@inbounds function (m::ICNN_Layer)(x::Matrix{FloatType}, z::Matrix{FloatType})
+@inbounds function (m::ICNN_Layer)(x::Matrix{FloatType}, z::Matrix{FloatType}, act::Activation = SOFTPLUS)
     s = m.W * z + m.U * x .+ m.b
-    return map(softplus, s), s  # convex & nondecreasing
+    return map(t -> act_value(act, t), s), s  # convex & nondecreasing
 end
 
 @inbounds function (m::ICNN)(x::VecOrMat{FloatType})::VecOrMat{FloatType}
-    z = softplus.(m.U0 * x .+ m.b0)  # first layer (no state W)
-    for layer in m.layers
-        z, _ = layer(x, z)
+    z = act_value.(Ref(m.acts[1]), m.U0 * x .+ m.b0)  # first layer (no state W)
+    for (i, layer) in enumerate(m.layers)
+        z, _ = layer(x, z, m.acts[i+1])
     end
     f = @. m.v'*z + m.a'*x + m.c
     return f
@@ -128,6 +172,7 @@ mutable struct gradient_struct{L, K}
     grad_x_buf::Matrix{FloatType}
     dL_store::NTuple{L, Matrix{FloatType}}  # ∂f/∂z per layer; widths may differ
     kernel::K                        # mul_add! or mmul_add_matrix!
+    huber_buf::Matrix{FloatType}     # (k, nbatch) for the Huber terms; (0, nbatch) without
 end
 
 function gradient_struct(m::ICNN, nbatch::Int, dim::Int; kernel = mul_add!)
@@ -143,8 +188,10 @@ function gradient_struct(m::ICNN, nbatch::Int, dim::Int; kernel = mul_add!)
     grad_x_buf  = zeros(FloatType, dim, nbatch)
     dL_store    = ntuple(i -> zeros(FloatType, layer_rows[i], nbatch), L)
 
+    huber_buf   = zeros(FloatType, m.huber === nothing ? 0 : length(m.huber.d), nbatch)
+
     return gradient_struct(lenlay, m, s_store, σ_store, z_store, init_grad_x, init_dL_dz,
-                           grad_x_buf, dL_store, kernel)
+                           grad_x_buf, dL_store, kernel, huber_buf)
 end
 
 "∇ICNN at `x`: a (dim, nbatch) matrix, or a vector holding one (entr_max: dim = 1, mpc: nbatch = 1)."
@@ -155,7 +202,7 @@ function (obj::gradient_struct)(x::AbstractVecOrMat{FloatType})
     s_first = obj.s_store[1]
     mul!(s_first, obj.m.U0, X)
     add_bias!(s_first, obj.m.b0)
-    activation_sigma!(obj.z_store[1], obj.σ_store[1], s_first)
+    activation_sigma!(obj.z_store[1], obj.σ_store[1], s_first, obj.m.acts[1])
 
     for i in 1:obj.lenlay
         layer  = obj.m.layers[i]
@@ -163,7 +210,7 @@ function (obj::gradient_struct)(x::AbstractVecOrMat{FloatType})
         mul!(s_next, layer.W, obj.z_store[i])
         muladd!(s_next, layer.U, X)
         add_bias!(s_next, layer.b)
-        activation_sigma!(obj.z_store[i+1], obj.σ_store[i+1], s_next)
+        activation_sigma!(obj.z_store[i+1], obj.σ_store[i+1], s_next, obj.m.acts[i+1])
     end
 
     copyto!(obj.dL_store[end], obj.init_dL_dz)
@@ -180,6 +227,16 @@ function (obj::gradient_struct)(x::AbstractVecOrMat{FloatType})
     dL_ds_first = obj.σ_store[1]
     hadamard!(dL_ds_first, obj.dL_store[1])
     muladd!(obj.grad_x_buf, obj.m.U0', dL_ds_first)
+
+    h = obj.m.huber
+    if h !== nothing   # + B (c .* clip.((Bᵀx + d) ./ δ, -1, 1))
+        T = obj.huber_buf
+        mul!(T, h.B', X isa AbstractVector ? reshape(X, :, 1) : X)
+        @inbounds for j in axes(T, 2), i in axes(T, 1)
+            T[i, j] = h.c[i] * clamp((T[i, j] + h.d[i]) / h.δ[i], -one(FloatType), one(FloatType))
+        end
+        mul!(obj.grad_x_buf, h.B, T, true, true)   # grad_x_buf is (dim, nbatch) for either kernel
+    end
 
     return x isa AbstractVector ? vec(obj.grad_x_buf) : obj.grad_x_buf
 end

@@ -16,7 +16,7 @@ using LMEADMM
 const FloatType = Float64
 include(joinpath(REPO, "problems", "qp_l1", "problem.jl"))
 
-const MODEL = length(ARGS) >= 1 ? ARGS[1] : "models/qp_l1/qp_l1-rho=1-128x128-10000ep.npz"
+const MODEL = length(ARGS) >= 1 ? ARGS[1] : "models/qp_l1/qp_l1-lambda=1-rho=10-128x128-huber100-5000ep.npz"
 const N_INST = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 5
 const TOL, FEAS_TOL, GAP, MAX_ITER = 1e-2, 1e-6, 1.0, 1000
 
@@ -29,7 +29,7 @@ relerr(a, b) = norm(a - b) / max(norm(b), 1e-12)
 println("model: $MODEL (ρ = $ρ, widths $(size(mp.U[1], 1)) × $(length(mp.U)))")
 
 # ---- 1. gradient error on the test split, by iteration ----
-te = npzread(joinpath(REPO, "data", "qp_l1", "training", "qp_l1-rho=1.0-test.npz"))
+te = npzread(joinpath(REPO, "data", "qp_l1", "training", "qp_l1-lambda=1.0-rho=10.0-gap=1.0-keep=0.1-test.npz"))
 Xq, Gq, it, K = te["input"], te["grad"], te["iteration"], te["n_iter"]
 # q = 0 (iteration 1 of every run) has ∇M = 0: left out, as its relative error is undefined
 keep = [norm(Gq[:, k]) > 1e-8 for k in axes(Xq, 2)]
