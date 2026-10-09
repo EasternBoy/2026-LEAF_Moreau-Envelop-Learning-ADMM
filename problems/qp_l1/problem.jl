@@ -1,5 +1,6 @@
 using JuMP
 import OSQP
+import Clarabel
 
 using Distributions
 using LinearAlgebra

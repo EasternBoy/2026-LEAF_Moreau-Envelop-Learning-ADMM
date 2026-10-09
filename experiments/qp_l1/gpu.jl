@@ -3,8 +3,7 @@
 #   julia --project=. experiments/qp_l1/gpu.jl [--float32] [--gopt=1.0]
 # 1. checks the GPU gradient against the CPU gradient (gradient_struct) on the test split;
 # 2. solves the instances in batches of 1000, 100 and 1 (the first 100 instances, one at a time)
-#    and reports the time per instance: batch wall time / batch size, GPU synchronised;
-# 3. the same with the ADMM loop on the CPU and only the ICNN gradient on the GPU (sLME_ADMM_hybrid).
+#    and reports the time per instance: batch wall time / batch size, GPU synchronised.
 const REPO = abspath(joinpath(@__DIR__, "..", ".."))
 using Pkg
 Base.active_project() == joinpath(REPO, "Project.toml") || Pkg.activate(REPO; io = devnull)
@@ -80,27 +79,3 @@ for bs in (1000, 100)
     report("batch $bs", collect(1:N), solve_batches(collect(1:N), bs)...)
 end
 report("batch 1 (first 100 instances)", collect(1:100), solve_batches(collect(1:100), 1)...)
-
-# ---- 3. hybrid: the loop on the CPU, only the ICNN gradient on the GPU ----
-probc = qp_cpu_problem(qp_data["A"], qp_data["G"], qp_data["h"])
-Qh, ph = qp_data["Q"], qp_data["p"]
-objective_cpu(Y) = vec(0.5 .* sum(Y .* (Qh * Y); dims = 1) .+ (ph' * Y) .+ QP_L1_LAMBDA .* sum(abs.(Y); dims = 1))
-function solve_hybrid(cols, bs)
-    Y = zeros(length(ph), length(cols)); its = zeros(Int, length(cols)); secs = 0.0
-    g = gradient_gpu(gm, bs)
-    sLME_ADMM_hybrid(probc, g, Xall[:, cols[1:bs]], ρ, objective_cpu; J_opt = Jopt[cols[1:bs]], gap = GAP,
-                     tol = TOL, feas_tol = FEAS_TOL, max_iter = MAX_ITER)       # warm-up (compile)
-    for r in Iterators.partition(eachindex(cols), bs)
-        Yb, ib, s = sLME_ADMM_hybrid(probc, g, Xall[:, cols[r]], ρ, objective_cpu; J_opt = Jopt[cols[r]], gap = GAP,
-                                     tol = TOL, feas_tol = FEAS_TOL, max_iter = MAX_ITER)
-        Y[:, r] = Yb; its[r] = ib; secs += s
-    end
-    return Y, its, secs
-end
-println("\n3. hybrid: ADMM loop on the CPU, ICNN gradient on the GPU\n")
-println("| Run | Solved | Time ms / instance | Iterations mean (max) | Opt. gap % mean (max) | Constr. viol. mean (max) |")
-println("|---|---|---|---|---|---|")
-for bs in (1000, 100)
-    report("hybrid, batch $bs", collect(1:N), solve_hybrid(collect(1:N), bs)...)
-end
-report("hybrid, batch 1 (first 100 instances)", collect(1:100), solve_hybrid(collect(1:100), 1)...)
