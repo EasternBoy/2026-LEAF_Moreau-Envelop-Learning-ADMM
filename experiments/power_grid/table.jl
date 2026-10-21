@@ -19,6 +19,7 @@ end
 # --tol-ip=<t> / --tol=<t> / --tol-admm=<t>: residual tolerance of IPOPT and MadNLP / MEL- and sMEL-ADMM / ADMM
 #   (defaults 1e-2 / 1e-2 / 1e-4); the IPOPT reference solve always uses reference_tol = 1e-10.
 # --samples=<n> measures only the first n saved instances (quick runs).
+# --gc-mem=<f> runs GC.gc() between instances only when the system's memory use is at least f (default 0.5).
 # --methods=<comma-separated list> runs a subset of the methods (IPOPT still gives the references).
 # --model / --lme-model replace the sMEL-ADMM / MEL-ADMM ICNN of problems/power_grid/setup.jl; the results go to
 # results/power_grid/table/<tag>/gap=<g_opt>/ instead of results/power_grid/table/gap=<g_opt>/.
@@ -36,6 +37,7 @@ const admm_tol = parse(Float64, table_arg("tol-admm", "1e-4"))
 const smel_feas_tol = 1e-4   # sMEL-ADMM returned-solution feasibility tolerance (residual: tol)
 const smel_gamma = parse(Float64, table_arg("smel-gamma", "1.6"))   # sMEL-ADMM over-relaxation of the z-update
 const admm_rho = 1.
+const admm_qp_solver = "Clarabel"   # QP sub-problem (w-update) of ADMM; MEL-ADMM keeps Gurobi
 const nsamples = parse(Int, table_arg("samples", "1000"))
 const g_opt = parse(Float64, table_arg("gopt", "0.1"))
 # sMEL-ADMM timing: "inline" times each iteration and pauses the timer for the checks;
@@ -57,7 +59,12 @@ const POWER_GRID_LME_MODEL = table_arg("lme-model", "models/power_grid/power_gri
     error("--model / --lme-model need --tag, so that their results do not overwrite the default models'")
 const output_dir = joinpath(repo_root, "results", "power_grid", "table", model_tag, "gap=$(g_opt)")
 const seed = 20262309
-const gc_every = 1
+const gc_every = 1   # progress is printed every gc_every instances
+# GC.gc() runs between instances only once the system's memory use reaches this fraction (--gc-mem);
+# below it, Julia's own collector runs when it needs to, possibly inside a timed solve.
+const gc_mem_frac = parse(Float64, table_arg("gc-mem", "0.5"))
+memory_used() = 1 - Sys.free_memory() / Sys.total_memory()   # free_memory is MemAvailable on Linux
+maybe_gc() = memory_used() >= gc_mem_frac && GC.gc()
 const max_iter = 1000
 const feas_tol = 1e-6
 const reference_tol = 1e-10
@@ -68,7 +75,7 @@ const methods = split(table_arg("methods", "IPOPT,MadNLP,ADMM,MEL-ADMM,sMEL-ADMM
 residual_tolerance(name) = name in ("IPOPT", "MadNLP") ? tol_ip : name == "ADMM" ? admm_tol : tol
 feasibility_tolerance(name) = name == "sMEL-ADMM" ? smel_feas_tol : residual_tolerance(name)
 
-# Initialize Gurobi only when a selected method needs it.
+# Initialize Gurobi only when a selected method needs it (MEL-ADMM; ADMM uses admm_qp_solver).
 GUROBI_ENV = nothing
 const power_grid_problem_dir = joinpath(repo_root, "problems", "power_grid")
 include(joinpath(power_grid_problem_dir, "problem.jl"))
@@ -187,7 +194,7 @@ function admm_runner(name, target)
     d = mpc_data
     solver_tol = residual_tolerance(name)
     if name == "ADMM"
-        solve = ADMM_eco_iter(d, prime_sol_struct("Ipopt", d), aux_solver_eco("Gurobi", d);
+        solve = ADMM_eco_iter(d, prime_sol_struct("Ipopt", d), aux_solver_eco(admm_qp_solver, d);
                              tol = solver_tol, max_iter = max_iter)
     elseif name == "MEL-ADMM"
         solve = LME_ADMM(d, gradient_struct(model_lme, s_mb, dim; kernel = mmul_add_matrix!),
@@ -296,16 +303,16 @@ function main()
         feasibility(run.vars, x0s[k], load, gen) <= feas_tol || error("Infeasible reference at sample $k")
         references[k] = get_objective(mpc_data, run.vars)
         isfinite(references[k]) || error("Nonfinite reference at sample $k")
-        k % gc_every == 0 && GC.gc()
+        maybe_gc()
     end
     instances["J_opt"] = references
     npzwrite(files[1], instances)
 
-    if any(m -> m in ("ADMM", "MEL-ADMM"), methods)
+    if "MEL-ADMM" in methods
         global GUROBI_ENV = Gurobi.Env()
     end
     runners = [name in ("IPOPT", "MadNLP") ? nlp_runner(name, target) : admm_runner(name, target) for name in methods]
-    metadata = Dict("N" => N, "rho" => admm_rho, "primary_scalar_variables" => dim * N,
+    metadata = Dict("N" => N, "rho" => admm_rho, "admm_qp_solver" => admm_qp_solver, "primary_scalar_variables" => dim * N,
         "normalization" => Dict("scale_m_u_p" => collect(mpc_data.scale), "cost_scale_K" => mpc_data.K,
             "note" => "all solvers use m/s_m, u/s_u, p/s_p, SOC x and cost J/K; objectives, gaps and violations are of the normalized problem"),
         "icnn_model" => POWER_GRID_MODEL,
@@ -330,7 +337,7 @@ function main()
             "experiments/power_grid/generate_table_instances.py",
         "methods" => methods,
         "julia_threads" => nthreads(), "blas_threads" => BLAS.get_num_threads(),
-        "julia_version" => string(VERSION), "gc_every" => gc_every,
+        "julia_version" => string(VERSION), "gc_every" => gc_every, "gc_memory_fraction" => gc_mem_frac,
         "max_iter" => max_iter, "feasibility_tolerance" => feas_tol,
         "reference_tolerance" => reference_tol, "discarded_warmups_per_solver_per_gap" => 1,
         "timing" => "Existing solver-returned seconds; split solver uses internal elapsed time",
@@ -368,7 +375,7 @@ function main()
             # Save every result, including iteration-limited runs.
             CSV.write(files[2], DataFrame([row]); append = length(rows) > 1)
         end
-        k % gc_every == 0 && GC.gc()
+        maybe_gc()
         if k % gc_every == 0 || k == nsamples
             @printf("%d/%d measured instances complete\n", k, nsamples)
         end

@@ -11,6 +11,7 @@ using Printf, Random, SparseArrays, LinearAlgebra, NPZ, JuMP, Statistics
 using Distributions
 
 const OUT = joinpath(REPO, "results", "qp_l1", "table")
+const INSTANCES = joinpath(REPO, "results", "qp_l1", "instances", "test_instances.npz")
 cd(REPO)
 
 const FloatType = Float64
@@ -42,7 +43,7 @@ slme_file(tag, gap) = "sLME-ADMM-$(tag)-gopt=$(gap).npz"
 admm_file(gap) = "ADMM-gopt=$(gap).npz"
 
 function instances()
-    path = joinpath(OUT, "instances.npz")
+    path = INSTANCES
     if isfile(path)
         saved = npzread(path)
         @assert all(saved[key] ≈ qp_data[key] for key in MATRICES)
@@ -51,7 +52,7 @@ function instances()
     Random.seed!(SEED)
     data_opt(n, neq, m) # Skip the warmup draw, matching experiments/qp/table.jl.
     X = reduce(vcat, [permutedims(data_opt(n, neq, m).x) for _ in 1:N_SAMPLES])
-    mkpath(OUT)
+    mkpath(dirname(path))
     npzwrite(path, Dict("X" => X, "seed" => SEED, "lambda" => QP_L1_LAMBDA,
                        (key => qp_data[key] for key in MATRICES)...))
     return X

@@ -9,7 +9,7 @@ Run from the repository root with the DC3 environment (see DC3/README.md)::
     python experiments/entr_max/table.py --retrain  # also retrain the DC3 networks
 
 DC3 is evaluated on the same 1000 instances per (n, m) as IPOPT and sLME-ADMM
-(results/entr_max/table/instances/, written by table.jl, which is called here if
+(results/entr_max/instances/, written by table.jl, which is called here if
 they do not exist yet).  The gap is measured against the Ipopt (tol 1e-8)
 ground truth stored in results/entr_max/table/ground_truth-n=..-m=...npz.  DC3 saves only
 its solutions `W`; they are scored by evaluate.jl with src/metrics.jl, the
@@ -36,7 +36,7 @@ from DC3.entr_max import data as D  # noqa: E402
 from DC3.entr_max.experiment import CONFIG_DIR, SPEC  # noqa: E402
 
 OUT = os.path.join(REPO, "results", "entr_max", "table")
-INST_DIR = os.path.join(OUT, "instances")
+INST_DIR = os.path.join(REPO, "results", "entr_max", "instances")
 SIZES = [(100, 1), (100, 10), (1000, 10), (1000, 100)]
 N_WARMUP = 10
 DC3_VERSION = 4                # bump to invalidate stored DC3 solutions

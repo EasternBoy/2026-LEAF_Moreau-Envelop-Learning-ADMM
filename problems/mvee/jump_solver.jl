@@ -1,6 +1,10 @@
 function logdet_solver(name::String, data)
-    model = pick_solver(name) 
-    set_silent(model)  
+    model = pick_solver(name)
+    set_silent(model)
+    # Clarabel 0.11.1's chordal PSD completion indexes an OrderedSet, which fails with
+    # OrderedCollections 2.x (MethodError in psd_complete!); X is dense, so the decomposition
+    # gains nothing here.
+    lowercase(name) == "clarabel" && set_optimizer_attribute(model, "chordal_decomposition_enable", false)
 
     m   = data.m
     n   = data.n

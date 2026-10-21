@@ -101,7 +101,7 @@ instance file).  Time is in ms, gap in %.
 
 | file | arrays |
 |---|---|
-| `instances/instances-n={n}-m={m}.npz` | `A` (1000, m, n), `b` (1000, m).  Git-ignored (up to 800 MB); regenerated deterministically by `table.jl` |
+| `../instances/instances-n={n}-m={m}.npz` | `A` (1000, m, n), `b` (1000, m).  Git-ignored (up to 800 MB); regenerated deterministically by `table.jl` |
 | `ground_truth-n={n}-m={m}.npz` | `J_opt`, `time_ms` (Ipopt, tol 1e-8), `seed` |
 | `IPOPT-gopt={1,0.1}-n={n}-m={m}.npz` | `W` (1000, n), `time_ms`, `iterations` (unused, 0), + scores |
 | `sLME-ADMM-gopt={1,0.1}-n={n}-m={m}.npz` | `W` (1000, n), `time_ms`, `iterations`, + scores |

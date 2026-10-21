@@ -1,0 +1,2 @@
+solver,target_gap_pct,residual_tol,time_mean_ms,time_std_ms,time_max_ms,samples,opt_gap_mean_pct,opt_gap_std_pct,opt_gap_max_pct,constr_viol_mean,constr_viol_max
+MEL-ADMM,0.01,0.01,34.14629578590393,5.202889684651132,49.233198165893555,1000,0.009317796389700626,0.0007476615199012779,0.009997995998300289,1.0629246417065419e-11,7.168832749648857e-10

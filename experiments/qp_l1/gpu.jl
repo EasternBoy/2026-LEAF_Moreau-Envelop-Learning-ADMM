@@ -40,7 +40,7 @@ Gg = Array(gradient_gpu!(gradient_gpu(gm, size(Xq, 2)), CuArray{T}(Xq)))
 @printf("1. gradient on %d test points: max |GPU - CPU| = %.2e (max |∇| %.2f)\n", size(Xq, 2), maximum(abs, Gg - Gc), maximum(abs, Gc))
 
 # ---- 2. qp_l1 instances ----
-inst = npzread(joinpath(OUT, "instances.npz")); Xall = Matrix{Float64}(inst["X"]')   # (neq, N)
+inst = npzread(joinpath(REPO, "results", "qp_l1", "instances", "test_instances.npz")); Xall = Matrix{Float64}(inst["X"]')   # (neq, N)
 Jopt = npzread(joinpath(OUT, "OSQP.npz"))["J_opt"]
 N = size(Xall, 2)
 prob = qp_gpu_problem(qp_data["A"], qp_data["G"], qp_data["h"]; T)

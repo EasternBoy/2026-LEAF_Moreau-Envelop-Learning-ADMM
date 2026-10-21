@@ -7,7 +7,7 @@ import MathOptInterface       as MOI
 
 const REPO     = abspath(joinpath(@__DIR__, "..", ".."))
 const OUT      = joinpath(REPO, "results", "entr_max", "table")
-const INST_DIR = joinpath(OUT, "instances")
+const INST_DIR = joinpath(REPO, "results", "entr_max", "instances")
 cd(REPO)   # utils.jl loads the ICNN with a path relative to the repository root
 
 const SIZES    = [(100, 1), (100, 10), (1000, 10), (1000, 100)]

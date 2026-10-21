@@ -6,7 +6,7 @@
     "n_train": 8000,
     "n_valid": 1000,
     "n_test": 1000,
-    "test_instances": "results/qp_l1/table/instances.npz"
+    "test_instances": "results/qp_l1/instances/test_instances.npz"
   },
   "partition": {
     "strategy": "random",

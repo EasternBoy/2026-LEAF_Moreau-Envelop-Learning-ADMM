@@ -30,7 +30,7 @@ from DC3.qp_l1 import data as D  # noqa: E402
 from DC3.qp_l1.experiment import SPEC  # noqa: E402
 
 OUT = os.path.join(REPO, "results", "qp_l1", "table")
-INSTANCES = os.path.join(OUT, "instances.npz")
+INSTANCES = os.path.join(REPO, "results", "qp_l1", "instances", "test_instances.npz")
 DC3_FILE = os.path.join(OUT, "DC3.npz")
 TUNED = os.path.join(REPO, "DC3", "results", "qp_l1-tune", "best.json")
 N_WARMUP = 10

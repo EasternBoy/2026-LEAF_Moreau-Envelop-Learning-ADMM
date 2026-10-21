@@ -16,7 +16,7 @@ const SIZES = [(100, 1), (100, 10), (1000, 10), (1000, 100)]
 const RESULT_PREFIXES = ["IPOPT-gopt=1", "IPOPT-gopt=0.1", "sLME-ADMM-gopt=1", "sLME-ADMM-gopt=0.1", "DC3"]
 
 function evaluate(n, m)
-    inst = npzread(joinpath(OUT, "instances", "instances-n=$(n)-m=$(m).npz"))
+    inst = npzread(joinpath(REPO, "results", "entr_max", "instances", "instances-n=$(n)-m=$(m).npz"))
     J_ref = npzread(joinpath(OUT, "ground_truth-n=$(n)-m=$(m).npz"))["J_opt"]
     for prefix in RESULT_PREFIXES
         path = joinpath(OUT, "$(prefix)-n=$(n)-m=$(m).npz")

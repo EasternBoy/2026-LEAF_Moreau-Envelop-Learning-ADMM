@@ -55,7 +55,7 @@ println("\n2. Hessian eigenvalues at 40 test points (exact envelope: within [0, 
         minimum(first, λl), maximum(last, λl), count(l -> l[2] > ρ, λl), length(λl), median(last.(λl)))
 
 # ---- 3 & 4. sLME-ADMM with a given gradient map ----
-inst = npzread(joinpath(REPO, "results", "qp_l1", "table", "instances.npz"))["X"]
+inst = npzread(joinpath(REPO, "results", "qp_l1", "instances", "test_instances.npz"))["X"]
 Jopt = npzread(joinpath(REPO, "results", "qp_l1", "table", "OSQP.npz"))["J_opt"]
 
 function run_admm(data, Jref, gradmap; trace = false)
