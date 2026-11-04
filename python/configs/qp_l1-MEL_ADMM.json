@@ -1,0 +1,35 @@
+{
+  "train_data": "data/qp_l1/training/qp_l1-lambda=1.0-rho=10.0-gap=1.0-keep=0.1-ADMM-train.npz",
+  "test_data": "data/qp_l1/training/qp_l1-lambda=1.0-rho=10.0-gap=1.0-keep=0.1-ADMM-test.npz",
+  "output": "models/qp_l1/qp_l1-MEL_ADMM-lambda=1-rho=10-64x64-huber100-5000ep.npz",
+  "_note": "QP + L1 (lambda = 1, rho = 10, dense Q; problems/qp_l1/problem.jl). Model: 64x64 ICNN (ELU, then softplus(5t)/5) + 100 learned Huber terms, fan_in initialisation, trained on ME/rho and grad ME/rho (scale_by_rho; the saved output layer and Huber weights are multiplied by rho): value + 5 * gradient MSE, Adam lr 1e-3 decaying by 0.9 every 200 epochs, batch 256, 5000 epochs, last-epoch weights. Data: julia --project=. experiments/qp_l1/data_gen_admm.jl --rho=10 --lambda=1 --gap=1 --keep=0.1 --mode=admm (regular ADMM (MEL-ADMM) trajectories with the exact prox until gap <= 1%, a random 10% of the iterates; 40000/10000 samples). Used by experiments/qp_l1/table.jl for MEL-ADMM only, with 0/1/2 exact correction steps at g_opt <= 1/0.1/0.01%.",
+  "scale_by_rho": true,
+  "acts": [
+    "elu",
+    "softplus5"
+  ],
+  "weight_act": "softplus",
+  "keep_best": false,
+  "export_act": "softplus",
+  "lower_bound": false,
+  "validate_on_test": true,
+  "train": {
+    "widths": [
+      64,
+      64
+    ],
+    "huber_terms": 100,
+    "init": "fan_in",
+    "lr": 0.001,
+    "lr_decay": {
+      "transition_steps": 200,
+      "decay_rate": 0.9,
+      "unit": "epoch"
+    },
+    "grad_weight": 5.0,
+    "l2_reg": 0,
+    "batch_size": 256,
+    "epochs": 5000,
+    "seed": 0
+  }
+}

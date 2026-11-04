@@ -4,6 +4,7 @@
 #                  affine projection, nonnegative slacks) with the exact prox in place of the learned
 #                  envelope; same stopping test and callback as sLME_ADMM
 #   sLME_ADMM_corrected  sLME-ADMM with the learned prox followed by exact ISTA correction steps
+#   MEL_ADMM       standard ADMM with the learned prox (+ exact ISTA correction steps)
 #   ADMM_standard  standard ADMM, as problems/qp/admm.jl: z = prox_f(w + α), w = projection of z - α
 #                  onto {y : Ay = x, Gy ≤ h} (a QP, solved by OSQP), α += w - z
 import ParametricOptInterface as POI
@@ -192,4 +193,45 @@ end
     solving_time = (time_ns() - start_time)/1e9
     y = v[1:n]
     return y, solving_time, get_objective(data, y)
+end
+
+# MEL-ADMM: the standard ADMM above with the learned prox in place of the exact one,
+#     z = q − ∇ICNN(q)/ρ (+ `steps` exact ISTA correction steps, as sLME_ADMM_corrected), q = w + α,
+#     w = projection of z − α onto {y : Ay = x, Gy ≤ h} (OSQP), α += w − z.
+# Returns y = w (feasible), the solving time and J(y).
+@inbounds function MEL_ADMM(data::data_opt, gradient::gradient_struct, proj, steps::Int = 0,
+    callback::Union{Function, Nothing} = nothing;
+    tol::FloatType = 1e-4, feas_tol::FloatType = 1e-6, max_iter::Int = 1000)
+
+    n, ρ = data.n, data.rho
+    Lc = QP_L1_EIGS[2] + ρ
+    τ = data.λ / Lc
+    z = zeros(FloatType, n); w = zeros(FloatType, n); α = zeros(FloatType, n)
+    q = zeros(FloatType, n); grad = zeros(FloatType, n); g = zeros(FloatType, n)
+    n_mb = div(n-1, vector_chunk(gradient)) + 1
+    local_gradients = ntuple(_ -> deepcopy(gradient), n_mb + 1)
+
+    start_time = time_ns()
+    for i in 1:max_iter
+        # ==== z-update: learned prox of f/ρ + correction steps ====
+        @. q = w + α
+        mini_batch!(grad, local_gradients, q)
+        @. z = q - grad/ρ
+        for _ in 1:steps
+            mul!(g, data.Q, z)
+            @. g += data.p + ρ * (z - q)
+            @. z = soft_threshold(z - g/Lc, τ)
+        end
+        # ==== w-update: projection onto the feasible set; dual update ====
+        w = proj(z - α, data)
+        @. α += w - z
+        residual = maximum(abs, w - z)
+        feasible = qp_solution_feasible(data, w, feas_tol)
+        status = callback === nothing ? true :
+            callback(z, w, α, nothing, nothing, i, get_objective(data, w), (time_ns() - start_time)/1e9)
+        status && residual < tol && feasible && break
+        i == max_iter && println("MEL-ADMM reached $max_iter iterations without convergence: residual=$residual; returning the last iterate.")
+    end
+    solving_time = (time_ns() - start_time)/1e9
+    return w, solving_time, get_objective(data, w)
 end

@@ -25,7 +25,8 @@ BASE_SIZE = 10
 LABEL_SIZE = 15                                  # y-label and reference-line labels: 1.5x the base font size
 TICK_SIZE = 1.1 * LABEL_SIZE
 YLABEL_SIZE = 1.5 * LABEL_SIZE
-METHODS = [("IPOPT", "#2a78d6"), ("sLME-ADMM", "#eb6834"), ("DC3", "#1baf7a")]
+METHODS = [("IPOPT", "#2a78d6"), ("sLME-ADMM", "#eb6834"), ("DC3", "#1baf7a")]   # (result-file prefix, color)
+LABELS = {"sLME-ADMM": "sMEL-ADMM"}                # x-axis label when it differs from the file prefix
 
 
 def load(meth, n, m):
@@ -46,7 +47,7 @@ def boxes(ax, vals):
     ax.grid(axis="y", color="#e4e3df", linewidth=0.6)
     ax.set_axisbelow(True)
     ax.set_xticks(range(1, len(METHODS) + 1))
-    ax.set_xticklabels([meth for meth, _ in METHODS])
+    ax.set_xticklabels([LABELS.get(meth, meth) for meth, _ in METHODS])
 
 
 def figure(k, ylabel, refs, fname):

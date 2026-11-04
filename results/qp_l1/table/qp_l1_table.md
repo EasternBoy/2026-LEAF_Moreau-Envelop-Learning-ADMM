@@ -15,15 +15,18 @@ label), each contracting the prox error by 1 - (λ_min(Q) + ρ)/(λ_max(Q) + ρ)
 point) solves the same slack form as OSQP at its default tolerances (1e-8). ADMM is
 the standard splitting: the exact prox of f, then the projection onto {Ay = x, Gy ≤ h} by OSQP
 (tolerance 1e-10), stopping at ‖w - z‖∞ < 0.01 with the same feasibility and gap tests.
+MEL-ADMM is the same standard ADMM with a learned prox in place of the exact one, followed by
+the same correction steps as sLME-ADMM; its model has the sLME-ADMM architecture and training
+but is trained on regular ADMM (MEL-ADMM) iterates instead of sMEL-ADMM ones.
 DC3 + correction also works on y directly.
 A timing cell needs every instance within the gap target and violation ≤ 0.0001;
 **bold** marks the lowest mean time among those. — means results are missing.
 
-|  | OSQP (slack form) mean (max) | ADMM mean (max) | Clarabel mean (max) | sLME-ADMM 64x64+100H-5000ep mean (max) | DC3 + correction mean (max) |
-|---|---|---|---|---|---|
-| Solving time (g_opt ≤ 1.0%) | 39.43 (463.47) | 29.87 (52.32) | 9.34 (210.79) | **2.83 (5.72)** | unable to achieve |
-| Solving time (g_opt ≤ 0.1%; sLME-ADMM + 1 correction step) | 39.43 (463.47) | 83.77 (210.51) | 9.34 (210.79) | **7.58 (15.93)** | unable to achieve |
-| Solving time (g_opt ≤ 0.01%; sLME-ADMM + 2 correction steps) | 39.43 (463.47) | 160.07 (814.76) | **9.34 (210.79)** | 15.44 (45.95) | unable to achieve |
-| Constr. viol. | 9.7e-12 (5.3e-11) | 7.3e-11 (2.9e-10) | 9.1e-14 (8.9e-13) | 1.9e-15 (4.2e-15) | 2.1e-14 (6.0e-14) |
-| Opt. gap (%) | 0 (0) | 0.00948 (0.01) | 5.52e-06 (2.38e-05) | 0.00966 (0.01) | 20.5 (58.3) |
-| Zeros (%) | 48.3 (51.0) | 48.3 (52.0) | 48.3 (51.0) | 48.2 (52.0) | 0.4 (3.0) |
+|  | OSQP (slack form) mean (max) | ADMM mean (max) | Clarabel mean (max) | MEL-ADMM 64x64+100H-5000ep mean (max) | sLME-ADMM 64x64+100H-5000ep mean (max) | DC3 + correction mean (max) |
+|---|---|---|---|---|---|---|
+| Solving time (g_opt ≤ 1.0%) | 39.43 (463.47) | 29.87 (52.32) | 9.34 (210.79) | 34.31 (264.73) | **2.83 (5.72)** | unable to achieve |
+| Solving time (g_opt ≤ 0.1%; (s)MEL-ADMM + 1 correction step) | 39.43 (463.47) | 83.77 (210.51) | 9.34 (210.79) | 92.26 (372.77) | **7.58 (15.93)** | unable to achieve |
+| Solving time (g_opt ≤ 0.01%; (s)MEL-ADMM + 2 correction steps) | 39.43 (463.47) | 160.07 (814.76) | **9.34 (210.79)** | 177.55 (905.01) | 15.44 (45.95) | unable to achieve |
+| Constr. viol. | 9.7e-12 (5.3e-11) | 7.3e-11 (2.9e-10) | 9.1e-14 (8.9e-13) | 7.4e-11 (2.9e-10) | 1.9e-15 (4.2e-15) | 2.1e-14 (6.0e-14) |
+| Opt. gap (%) | 0 (0) | 0.00948 (0.01) | 5.52e-06 (2.38e-05) | 0.00948 (0.01) | 0.00966 (0.01) | 20.5 (58.3) |
+| Zeros (%) | 48.3 (51.0) | 48.3 (52.0) | 48.3 (51.0) | 48.3 (52.0) | 48.2 (52.0) | 0.4 (3.0) |

@@ -3,6 +3,11 @@
 #   --rho, --lambda: ρ of the envelope/ADMM and the L1 weight λ (default QP_L1_RHO, QP_L1_LAMBDA)
 #   --gap: also stop only once the objective gap to OSQP (tol 1e-8) is ≤ gap % (default Inf: no gap test)
 #   --keep: fraction of each instance's distinct iterates kept, drawn at random (default 1: all)
+#   --mode=admm: collect the regular ADMM iterates that MEL-ADMM runs (MEL_ADMM / ADMM_standard of
+#                problems/qp_l1/admm.jl: z = prox_f(w + α), w = OSQP projection of z − α onto
+#                {Ay = x, Gy ≤ h}, α += w − z; prox inputs q = w + α) instead of sMEL-ADMM's;
+#                the files get "-ADMM" before the split.  Same stopping test (max|w − z| < tol,
+#                w feasible to feas_tol, gap ≤ --gap).
 # The prox has no closed form (dense Q): each one is solved by FISTA (problems/qp_l1/problem.jl).
 # Collects 40000/10000 vector samples from separate train/test instance streams: every distinct
 # iterate of each converged exact sMEL-ADMM run is a sample, and instances are drawn until the
@@ -13,6 +18,7 @@
 using Pkg; Pkg.activate(joinpath(@__DIR__, "..", ".."); io = devnull)
 using Printf, Random, LinearAlgebra, SparseArrays, NPZ, Distributions
 using LMEADMM
+using JuMP
 
 function gen_arg(name, default)
     i = findfirst(a -> startswith(a, "--$name="), ARGS)
@@ -23,6 +29,7 @@ const FloatType = Float64
 include(joinpath(@__DIR__, "..", "..", "problems", "qp_l1", "problem.jl"))
 include(joinpath(@__DIR__, "..", "..", "problems", "qp_l1", "setup.jl"))
 include(joinpath(@__DIR__, "..", "..", "problems", "qp_l1", "jump_solver.jl"))
+include(joinpath(@__DIR__, "..", "..", "problems", "qp_l1", "admm.jl"))
 
 const REPO         = abspath(joinpath(@__DIR__, "..", ".."))
 const OUT          = joinpath(REPO, "data", "qp_l1", "training")
@@ -40,6 +47,9 @@ const KEEP_FRAC    = gen_arg("keep", 1.0)
 const GAP_STOP     = gen_arg("gap", Inf)
 0 < KEEP_FRAC <= 1 || error("--keep must be in (0, 1]")
 const NEQ          = 50
+const MODE_ARG     = findfirst(startswith("--mode="), ARGS)
+const MODE         = MODE_ARG === nothing ? "smel" : split(ARGS[MODE_ARG], "="; limit = 2)[2]
+MODE in ("smel", "admm") || error("--mode must be smel or admm")
 
 function instance(rng, n, m)
     return data_opt(; n, neq = NEQ, nineq = m, x = rand(rng, Uniform(-1, 1), NEQ), rho = RHO, λ = LAMBDA)
@@ -85,6 +95,33 @@ function admm_inputs(data::data_opt; max_iter = MAX_ITER, tol = SLME_TOL, feas_t
     error("Exact sMEL-ADMM did not converge in $max_iter iterations: primal=$primal_residual, dual=$dual_residual; samples were not accepted")
 end
 
+"Regular ADMM (as MEL-ADMM) with the exact prox and the stopping test of MEL_ADMM; returns as admm_inputs."
+function regular_admm_inputs(data::data_opt; max_iter = MAX_ITER, tol = SLME_TOL, feas_tol = FEAS_TOL,
+                             J_ref = NaN, gap_stop = GAP_STOP)
+    n, ρ = data.n, data.rho
+    proj = feasible_projection(data)
+    z = zeros(n); w = zeros(n); α = zeros(n)
+    Q = Vector{Vector{FloatType}}(); E = FloatType[]; Gr = Vector{FloatType}[]
+    residual = Inf
+    for i in 1:max_iter
+        q = w + α
+        z, env = prox_env(q; ρ = ρ, λ = data.λ)
+        push!(Q, q); push!(E, env); push!(Gr, ρ*(q - z))
+        w_previous = copy(w)
+        w = proj(z - α, data)
+        α .+= w - z
+        residual = maximum(abs, w - z)
+        gap_ok = !isfinite(gap_stop) || 100abs(get_objective(data, w) - J_ref)/max(abs(J_ref), eps(FloatType)) <= gap_stop
+        if residual < tol && qp_solution_feasible(data, w, feas_tol) && gap_ok
+            eq_viol = maximum(abs, data.A*w - data.x)
+            ineq_viol = max(maximum(data.G*w - data.h), 0.0)
+            return reduce(hcat, Q), E, reduce(hcat, Gr), w, (primal_residual = residual,
+                dual_residual = ρ * maximum(abs, w - w_previous), eq_viol = eq_viol, ineq_viol = ineq_viol)
+        end
+    end
+    error("Exact ADMM did not converge in $max_iter iterations: residual=$residual; samples were not accepted")
+end
+
 function collect_split(split, seed, total)
     rng = Xoshiro(seed)
     X = Vector{FloatType}[]; E = FloatType[]; G = Vector{FloatType}[]
@@ -98,7 +135,7 @@ function collect_split(split, seed, total)
         # The gap stopping test (--gap) and a diagnostic (labels come from the exact prox): NaN when OSQP stops short.
         J_opt = try last(JuMP_solver("osqp", data, 1e-8)) catch; NaN end
         isfinite(GAP_STOP) && !isfinite(J_opt) && continue   # no reference for the gap test
-        Q, env, grad, y, status = admm_inputs(data; J_ref = J_opt)
+        Q, env, grad, y, status = (MODE == "admm" ? regular_admm_inputs : admm_inputs)(data; J_ref = J_opt)
         gap = 100abs(get_objective(data, y) - J_opt)/max(abs(J_opt), eps(FloatType))
         K = size(Q, 2)
         pool = unique(t -> Q[:, t], collect(1:K))
@@ -120,12 +157,12 @@ function collect_split(split, seed, total)
         @printf("%-5s instance %4d: ADMM %4d it., %4d distinct q, kept %4d, total %6d | primal=%.1e dual=%.1e eq=%.1e OSQP gap=%.3g%%\n",
                 split, k, K, n_distinct, length(keep), length(X), status.primal_residual, status.dual_residual, status.eq_viol, gap)
     end
-    path = joinpath(OUT, "qp_l1-lambda=$(LAMBDA)-rho=$(RHO)" * (isfinite(GAP_STOP) ? "-gap=$(GAP_STOP)" : "") * (KEEP_FRAC < 1 ? "-keep=$(KEEP_FRAC)" : "") * "-$(split).npz")
+    path = joinpath(OUT, "qp_l1-lambda=$(LAMBDA)-rho=$(RHO)" * (isfinite(GAP_STOP) ? "-gap=$(GAP_STOP)" : "") * (KEEP_FRAC < 1 ? "-keep=$(KEEP_FRAC)" : "") * (MODE == "admm" ? "-ADMM" : "") * "-$(split).npz")
     npzwrite(path, merge(Dict("input" => reduce(hcat, X), "grad" => reduce(hcat, G), "enve" => E, "rho" => RHO,
                               "seed" => seed, "full_trajectory" => KEEP_FRAC == 1, "instances" => k,
                               "Q" => qp_data["Q"], "p" => qp_data["p"], "A" => qp_data["A"],
                               "G" => qp_data["G"], "h" => qp_data["h"], "lambda" => LAMBDA, "keep_frac" => KEEP_FRAC, "gap_stop_pct" => GAP_STOP, "tol" => SLME_TOL, "feas_tol" => FEAS_TOL, "max_iter" => MAX_ITER,
-                              "normalized_slacks" => true, "scaled_duals" => true), meta, checks))
+                              "normalized_slacks" => true, "scaled_duals" => true, "regular_admm" => MODE == "admm"), meta, checks))
     @printf("wrote %s: %d samples from %d instances, q in [%.3f, %.3f]\n", path, length(X), k, minimum(minimum, X), maximum(maximum, X))
 end
 

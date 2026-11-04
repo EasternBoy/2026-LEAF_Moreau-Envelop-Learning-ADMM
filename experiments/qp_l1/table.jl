@@ -1,6 +1,7 @@
-# QP + L1 benchmark: OSQP and Clarabel (slack form), standard ADMM, sLME-ADMM with the ICNN + Huber model,
+# QP + L1 benchmark: OSQP and Clarabel (slack form), standard ADMM, MEL-ADMM and sLME-ADMM with the ICNN + Huber model,
 # DC3 + correction.
 #   julia --project=. experiments/qp_l1/table.jl            # run missing Julia results, then render
+#   julia --project=. experiments/qp_l1/table.jl --gc-mem=0.5   # GC.gc() between instances once memory use ≥ 50% (default)
 #   julia --project=. experiments/qp_l1/table.jl --force    # rerun the Julia solvers
 #   julia --project=. experiments/qp_l1/table.jl --render   # render saved results only
 # DC3 + correction results come from experiments/qp_l1/table.py.
@@ -32,6 +33,9 @@ const ZERO_TOL = 1e-4            # |y_i| ≤ ZERO_TOL counts as zero
 # 64x64 ICNN (ELU, softplus(5t)/5) + 100 learned Huber terms, 5000 epochs on ME/ρ (λ = 1, ρ = 10):
 # python python/train.py qp_l1 (python/configs/qp_l1.json)
 const MODELS = ["64x64+100H-5000ep" => "models/qp_l1/qp_l1-lambda=1-rho=10-64x64-huber100-5000ep.npz"]
+# MEL-ADMM's own model, same architecture and training, on regular ADMM (MEL-ADMM) iterates:
+# experiments/qp_l1/data_gen_admm.jl --mode=admm; python python/train.py qp_l1-MEL_ADMM
+const MEL_MODELS = ["64x64+100H-5000ep" => "models/qp_l1/qp_l1-MEL_ADMM-lambda=1-rho=10-64x64-huber100-5000ep.npz"]
 
 include(joinpath(REPO, "problems", "qp_l1", "problem.jl"))
 include(joinpath(REPO, "problems", "qp_l1", "setup.jl"))
@@ -39,6 +43,12 @@ include(joinpath(REPO, "problems", "qp_l1", "jump_solver.jl"))
 include(joinpath(REPO, "problems", "qp_l1", "admm.jl"))
 
 const MATRICES = ("Q", "p", "A", "G", "h")
+# GC.gc() runs between instances only once the system's memory use reaches this fraction (--gc-mem=<f>).
+const GC_ARG = findfirst(startswith("--gc-mem="), ARGS)
+const GC_MEM_FRAC = GC_ARG === nothing ? 0.5 : parse(Float64, ARGS[GC_ARG][length("--gc-mem=")+1:end])
+memory_used() = 1 - Sys.free_memory() / Sys.total_memory()   # free_memory is MemAvailable on Linux
+maybe_gc() = memory_used() >= GC_MEM_FRAC && GC.gc()
+mel_file(tag, gap) = "MEL-ADMM-$(tag)-gopt=$(gap).npz"
 slme_file(tag, gap) = "sLME-ADMM-$(tag)-gopt=$(gap).npz"
 admm_file(gap) = "ADMM-gopt=$(gap).npz"
 
@@ -73,30 +83,39 @@ function score(X, W, Jopt)
                 "zero_pct" => 100 .* vec(mean(abs.(W) .<= ZERO_TOL; dims = 2)))
 end
 
+todo(file) = "--force" in ARGS || !isfile(joinpath(OUT, file))
+
 function run_julia(X)
     mkpath(OUT)
-    Wopt = zeros(N_SAMPLES, n); Topt = zeros(N_SAMPLES); Jopt = zeros(N_SAMPLES)
-    JuMP_solver("osqp", instance(X, 1), OSQP_TOL) # compile
-    for k in 1:N_SAMPLES
-        Wopt[k, :], Topt[k], Jopt[k] = JuMP_solver("osqp", instance(X, k), OSQP_TOL)
-        k % 200 == 0 && println("OSQP: $k / $N_SAMPLES")
+    if !todo("OSQP.npz")
+        Jopt = npzread(joinpath(OUT, "OSQP.npz"))["J_opt"]
+    else
+        Wopt = zeros(N_SAMPLES, n); Topt = zeros(N_SAMPLES); Jopt = zeros(N_SAMPLES)
+        JuMP_solver("osqp", instance(X, 1), OSQP_TOL) # compile
+        for k in 1:N_SAMPLES
+            Wopt[k, :], Topt[k], Jopt[k] = JuMP_solver("osqp", instance(X, k), OSQP_TOL)
+            k % 200 == 0 && println("OSQP: $k / $N_SAMPLES")
+        end
+        npzwrite(joinpath(OUT, "OSQP.npz"),
+                 Dict("W" => Wopt, "J_opt" => Jopt, "time_ms" => 1e3 .* Topt, "tol" => OSQP_TOL,
+                      "max_iter" => 100_000,
+                      "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA))
     end
-    npzwrite(joinpath(OUT, "OSQP.npz"),
-             Dict("W" => Wopt, "J_opt" => Jopt, "time_ms" => 1e3 .* Topt, "tol" => OSQP_TOL,
-                  "max_iter" => 100_000,
-                  "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA))
     # Clarabel (interior point) on the same slack form, default tolerances (1e-8)
-    Wc = zeros(N_SAMPLES, n); Tc = zeros(N_SAMPLES)
-    JuMP_solver("clarabel", instance(X, 1), CLARABEL_TOL) # compile
-    for k in 1:N_SAMPLES
-        Wc[k, :], Tc[k], _ = JuMP_solver("clarabel", instance(X, k), CLARABEL_TOL)
-        k % 200 == 0 && println("Clarabel: $k / $N_SAMPLES")
+    if todo("Clarabel.npz")
+        Wc = zeros(N_SAMPLES, n); Tc = zeros(N_SAMPLES)
+        JuMP_solver("clarabel", instance(X, 1), CLARABEL_TOL) # compile
+        for k in 1:N_SAMPLES
+            Wc[k, :], Tc[k], _ = JuMP_solver("clarabel", instance(X, k), CLARABEL_TOL)
+            k % 200 == 0 && println("Clarabel: $k / $N_SAMPLES")
+        end
+        npzwrite(joinpath(OUT, "Clarabel.npz"),
+                 Dict("W" => Wc, "time_ms" => 1e3 .* Tc, "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA))
     end
-    npzwrite(joinpath(OUT, "Clarabel.npz"),
-             Dict("W" => Wc, "time_ms" => 1e3 .* Tc, "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA))
     # Standard ADMM: prox of f (FISTA), projection onto the feasible set (OSQP)
     proj = feasible_projection(instance(X, 1))
     for gap in GAPS
+        todo(admm_file(gap)) || continue
         GAP_TARGET[] = gap
         global J_opt = Jopt[1]
         ADMM_standard(instance(X, 1), proj, sLME_ADMM_callback; tol = SLME_TOL, feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER) # compile
@@ -105,7 +124,7 @@ function run_julia(X)
             global J_opt = Jopt[k]
             W[k, :], T[k], _ = ADMM_standard(instance(X, k), proj, sLME_ADMM_callback; tol = SLME_TOL,
                                              feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER)
-            k % 5 == 0 && GC.gc()
+            maybe_gc()
             k % 200 == 0 && println("standard ADMM: $k / $N_SAMPLES")
         end
         println("standard ADMM, g_opt ≤ $gap%: done")
@@ -114,11 +133,40 @@ function run_julia(X)
                       "max_iter" => MAX_ITER, "oracle_assisted" => true,   # prox: FISTA; projection: OSQP, tol 1e-10
                       "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA, "rho" => QP_L1_RHO))
     end
-    for (tag, path) in MODELS
+    function learned_gradient(path)
         ρ_model, mp = load_model(path)
         ρ_model ≈ qp_data["rho"][] || error("$path was trained for ρ = $ρ_model, the problem uses ρ = $(qp_data["rho"][])")
-        gradient = gradient_struct(ICNN(mp), 1, n)
+        return gradient_struct(ICNN(mp), 1, n)
+    end
+    # MEL-ADMM: standard ADMM with its learned prox and the same correction steps as sLME-ADMM
+    for (tag, path) in MEL_MODELS
+        gradient = learned_gradient(path)
         for gap in GAPS
+            todo(mel_file(tag, gap)) || continue
+            GAP_TARGET[] = gap
+            global J_opt = Jopt[1]
+            steps = CORRECTION[gap]
+            mel(d) = MEL_ADMM(d, gradient, proj, steps, sLME_ADMM_callback; tol = SLME_TOL, feas_tol = SLME_FEAS_TOL, max_iter = MAX_ITER)
+            mel(instance(X, 1)) # compile
+            W = zeros(N_SAMPLES, n); T = zeros(N_SAMPLES)
+            for k in 1:N_SAMPLES
+                global J_opt = Jopt[k]
+                W[k, :], T[k], _ = mel(instance(X, k))
+                maybe_gc()
+                k % 200 == 0 && println("MEL-ADMM: $k / $N_SAMPLES")
+            end
+            println("MEL-ADMM $tag ($steps correction steps), g_opt ≤ $gap%: done")
+            npzwrite(joinpath(OUT, mel_file(tag, gap)),
+                     Dict("W" => W, "time_ms" => 1e3 .* T, "model_epochs" => parse(Int, match(r"(\d+)ep$", tag)[1]), "max_opt_gap" => gap,
+                          "tol" => SLME_TOL, "feas_tol" => SLME_FEAS_TOL, "max_iter" => MAX_ITER,
+                          "oracle_assisted" => true, "correction_steps" => steps,   # projection: OSQP, tol 1e-10
+                          "seed" => SEED, "samples" => N_SAMPLES, "lambda" => QP_L1_LAMBDA, "rho" => QP_L1_RHO))
+        end
+    end
+    for (tag, path) in MODELS
+        gradient = learned_gradient(path)
+        for gap in GAPS
+            todo(slme_file(tag, gap)) || continue
             GAP_TARGET[] = gap
             global J_opt = Jopt[1]
             steps = CORRECTION[gap]
@@ -130,7 +178,7 @@ function run_julia(X)
             for k in 1:N_SAMPLES
                 global J_opt = Jopt[k]
                 W[k, :], T[k], _ = solve(instance(X, k))
-                k % 5 == 0 && GC.gc()
+                maybe_gc()
             end
             println("sLME-ADMM $tag ($steps correction steps), g_opt ≤ $gap%: done")
             npzwrite(joinpath(OUT, slme_file(tag, gap)),
@@ -153,6 +201,9 @@ function render(X)
     columns = Tuple{String, Dict{Float64, Any}}[("OSQP (slack form)", Dict{Float64, Any}(gap => osqp for gap in GAPS)),
                                                 ("ADMM", Dict{Float64, Any}(gap => load(admm_file(gap)) for gap in GAPS)),
                                                 ("Clarabel", Dict{Float64, Any}(gap => load("Clarabel.npz") for gap in GAPS))]
+    for (tag, _) in MEL_MODELS
+        push!(columns, ("MEL-ADMM $tag", Dict{Float64, Any}(gap => load(mel_file(tag, gap)) for gap in GAPS)))
+    end
     for (tag, _) in MODELS
         push!(columns, ("sLME-ADMM $tag", Dict{Float64, Any}(gap => load(slme_file(tag, gap)) for gap in GAPS)))
     end
@@ -174,7 +225,7 @@ function render(X)
         text = [isfinite(c[2]) && i == best ? "**$(c[1])**" : c[1] for (i, c) in enumerate(cells)]
         steps = CORRECTION[gap]
         label = steps == 0 ? "Solving time (g_opt ≤ $(gap)%)" :
-                "Solving time (g_opt ≤ $(gap)%; sLME-ADMM + $steps correction step$(steps > 1 ? "s" : ""))"
+                "Solving time (g_opt ≤ $(gap)%; (s)MEL-ADMM + $steps correction step$(steps > 1 ? "s" : ""))"
         push!(rows, "| $label | $(join(text, " | ")) |")
     end
     final = [by_gap[minimum(GAPS)] for (_, by_gap) in columns]   # from the tightest target
@@ -201,6 +252,9 @@ function render(X)
     point) solves the same slack form as OSQP at its default tolerances (1e-8). ADMM is
     the standard splitting: the exact prox of f, then the projection onto {Ay = x, Gy ≤ h} by OSQP
     (tolerance 1e-10), stopping at ‖w - z‖∞ < $SLME_TOL with the same feasibility and gap tests.
+    MEL-ADMM is the same standard ADMM with a learned prox in place of the exact one, followed by
+    the same correction steps as sLME-ADMM; its model has the sLME-ADMM architecture and training
+    but is trained on regular ADMM (MEL-ADMM) iterates instead of sMEL-ADMM ones.
     DC3 + correction also works on y directly.
     A timing cell needs every instance within the gap target and violation ≤ $C_V;
     **bold** marks the lowest mean time among those. — means results are missing.
@@ -215,7 +269,7 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
     X = instances()
-    files = ["OSQP.npz"; "Clarabel.npz"; [admm_file(gap) for gap in GAPS]; [slme_file(tag, gap) for (tag, _) in MODELS for gap in GAPS]]
-    "--render" in ARGS || (("--force" in ARGS || !all(f -> isfile(joinpath(OUT, f)), files)) && run_julia(X))
+    files = ["OSQP.npz"; "Clarabel.npz"; [admm_file(gap) for gap in GAPS]; [mel_file(tag, gap) for (tag, _) in MEL_MODELS for gap in GAPS]; [slme_file(tag, gap) for (tag, _) in MODELS for gap in GAPS]]
+    "--render" in ARGS || (any(todo, files) && run_julia(X))
     render(X)
 end
